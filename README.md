@@ -1,4 +1,4 @@
-# Computer Architecture Group Repository
+# Software Engineering Group Repository
 Contributors: Stephen, Hasan, Adam, Ivan, Ellis, Hongzhan
 
 ## What is this?
