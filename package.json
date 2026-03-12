@@ -1,0 +1,40 @@
+{
+  "name": "sha-257",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Group 12 implementation of SWE project",
+  "homepage": "https://github.com/Purple-Chicken/javascript-makes-me-vomit#readme",
+  "bugs": {
+    "url": "https://github.com/Purple-Chicken/javascript-makes-me-vomit/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Purple-Chicken/javascript-makes-me-vomit.git"
+  },
+  "license": "ISC",
+  "author": "Purple-Chicken",
+  "type": "module",
+  "main": "main.ts",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "tslib": "^2.6.2"
+  },
+  "devDependencies": {
+    "@cucumber/cucumber": "^12.7.0",
+    "@types/jasmine": "^6.0.0",
+    "@types/node": "^20.10.6",
+    "dotenv": "^17.3.1",
+    "eslint": "^10.0.3",
+    "jasmine": "^6.1.0",
+    "typescript": "^5.3.3",
+    "vite": "^8.0.0"
+  }
+}
