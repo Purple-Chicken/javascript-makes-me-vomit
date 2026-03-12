@@ -22,6 +22,9 @@ __pycache__/
 venv/
 ENV/
 
+# Docker containers 
+backend/ollama_data
+
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
