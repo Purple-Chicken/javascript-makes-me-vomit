@@ -12,39 +12,62 @@ You can have people work on a different version of a file, or even roll back to 
 
 ## How is it structured?
 
-TBD
+- `src`: Source directory for our project 
+    - `src/css`: Our CSS files go here 
+    - `src/pages`: The actual different pages of the website
+    - `src/routes`: Routing info (update page without <C-r> refresh)
+- `static/`: where we put images 
+- `tests/`: Our Cucumber and Jasmine testing files go here
+- `package.json`: Packages needed to run the program 
+- `tsconfig.json`: Configuration of TS in our project 
+- `.env` , `.env.example`: For later use, sets up environment variables for when we include the database and service 
+
+## How do I contribute? 
+
+First, make sure you have the project dependencies installed: `python3`, `git`, `npm`. 
+
+Second, make sure you have the repo locally: 
+ ```
+ git clone https://github.com/Purple-Chicken/javascript-makes-me-vomit.git 
+```
+
+Once you `cd` into the repository, you would need to make the following changes: 
+- Copy `.env.example` into `.env`, making changes as needed 
+- Start `ollama` and database using 
+```docker compose -f backend/docker-compose.yaml up -d```
+- run `npm i` to install/update all the node modules
+- run `npm run dev` to run the development (testing) environment 
 
  ## How do I use Git?
 
-### Initial setup
- First, you want to open up your code editor, and set up your path to where you want to be working in the filesystem. Then you can run: 
- ```
- git clone https://github.com/Purple-Chicken/javascript-makes-me-vomit.git
-```
-to copy this repository to your filesystem. 
 
 ### Typical session
-When starting your session, it's important to get the latest version of the repo from remote (GitHub). You do this with: 
+When starting your session, it's important to create a new branch for a feature. You make a new branch by running: 
 ```
-git pull
+git branch -b [new-branch-name]
 ```
-This way, you can get the lastest contributions from your peers and build on their work instead of redoing it.
+This way, you don't push directly to main and put potentially risky code in production. 
 
-Now, you can work on your changes. Don't forget to save your progress by saving the file regularly. 
-
-Once you have done something (can be a small commit), you can stage your changes, create a commit, and push to remote by running:
+If you want to work on an existing branch, you can run: 
 ```
-git add [path/to/file] ; 
+git checkout [existing-branch-name]
+```
+
+Once you have done something (can be a small commit), you can stage your changesand create a commit by running:
+```
+git add [path/to/file(s)] ; 
 git commit -m "[insert message here]" ; 
-git push 
 ```
+After you have a few commits, you can sync to remote.
 
-If someone else has been working on something at the same time, to check if you are up to date (and not update your local branch), you can run: 
+You can monitor your progress with `git status`. It tells you what branch you are working on, how many commits you are ahead/behind, 
+
+If you have created a new branch 
 ```
-git fetch origin main
+git push --set-upstream origin [new-branch-name]
 ```
-And if you want to take any up-to-date changes that may exist into your current working branch, you can run: 
-```
-git pull
-```
+And, assuming you are are not on main, you can push onto your branch. 
+
+In GitHub, you can make a pull request if you want to merge to main. 
+
 
