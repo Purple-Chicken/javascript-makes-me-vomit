@@ -1,0 +1,26 @@
+services:
+  ollama:
+    image: ollama/ollama:0.17.7
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ./ollama_data:/root/.ollama
+    restart: unless-stopped
+
+  mongodb:
+    image: mongo:8.2
+    container_name: mongodb
+    environment:
+      MONGODB_URI: "mongodb://localhost:27017/mydb"
+      JWT_SECRET: "LOL"    
+      ADMIN_USER: "admin"
+      ADMIN_PASSWORD: "admin"
+      MONGO_INITDB_ROOT_USERNAME: "admin" 
+      MONGO_INITDB_ROOT_PASSWORD: "admin" 
+    ports:
+      - 27017:27017
+    volumes: 
+      - dbdata:/data/db
+volumes:
+  dbdata:
