@@ -1,4 +1,4 @@
-let keyHandler = null;
+let keyHandler: ((e: KeyboardEvent) => void) | null = null;
 
 const html = `
   <h1>Keyboard Listener</h1>
@@ -8,6 +8,9 @@ const html = `
 
 const onLoad = () => {
   const output = document.getElementById('keyOutput');
+  if (!output) {
+    return;
+  }
   keyHandler = (e) => {
     output.textContent = `Key: ${e.key}, Code: ${e.code}`;
   };  
