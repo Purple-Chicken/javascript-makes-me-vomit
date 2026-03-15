@@ -7,6 +7,9 @@ const html = `
 `;
 
 const onLoad = () => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return;
+  }
   const output = document.getElementById('keyOutput');
   if (!output) {
     return;
@@ -18,6 +21,9 @@ const onLoad = () => {
 }
 
 const cleanup = () => {
+  if (typeof window === 'undefined') {
+    return;
+  }
   if (keyHandler) {
     window.removeEventListener('keydown', keyHandler);
   }
