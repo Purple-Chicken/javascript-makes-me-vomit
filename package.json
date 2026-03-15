@@ -23,7 +23,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "tsc -p tsconfig.spec.json && node --experimental-vm-modules ./node_modules/jasmine/bin/jasmine.js --config=jasmine.json"
+    "test": "tsc -p tsconfig.spec.json && node --experimental-vm-modules ./node_modules/jasmine/bin/jasmine.js --config=jasmine.json",
+    "acceptance": "tsc -p tsconfig.spec.json && cucumber-js"
   },
   "dependencies": {
     "tslib": "^2.6.2"
