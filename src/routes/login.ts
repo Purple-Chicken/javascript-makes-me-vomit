@@ -18,10 +18,16 @@ const html=`
                 <input type="password" id="password" class="input">
                 <span class="error-message"></span>
             </div>
+            <br> 
+            <div class="input-group">
+                <label for="remember-me" class="label">Remember Me</label>
+                <input type="checkbox" id="remember-me" class="input">
+                <span class="error-message"></span>
+            </div>
             <br>
             <button class="button" type="submit">Login</button>
         </form>
-        <a href="#/signup">Sign Up</a>
+        <p>Don't have an account? <a href="#/signup">Sign Up</a> </p>
     </div>
 `; 
 const onLoad = () => {
