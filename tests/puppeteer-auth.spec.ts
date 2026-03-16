@@ -1,6 +1,7 @@
 import net from 'node:net';
 import path from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
+import { MongoClient } from 'mongodb';
 import puppeteer, { type Browser, type Page } from 'puppeteer';
 import { createServer, type ViteDevServer } from 'vite';
 
@@ -39,6 +40,34 @@ const waitForPort = async (host: string, port: number, timeoutMs = 15000) => {
   throw new Error(`Timeout waiting for ${host}:${port}`);
 };
 
+const resolveMongoUri = async (): Promise<string> => {
+  const candidates = [
+    process.env.MONGODB_URI,
+    'mongodb://127.0.0.1:27017/sha257',
+    'mongodb://127.0.0.1:27017/mydb',
+    'mongodb://admin:admin@127.0.0.1:27017/mydb?authSource=admin',
+  ].filter((uri): uri is string => Boolean(uri));
+
+  for (const uri of candidates) {
+    const client = new MongoClient(uri, {
+      serverSelectionTimeoutMS: 2000,
+      connectTimeoutMS: 2000,
+    });
+    try {
+      await client.connect();
+      return uri;
+    } catch {
+      // Try next URI candidate.
+    } finally {
+      await client.close().catch(() => undefined);
+    }
+  }
+
+  throw new Error(
+    'No reachable MongoDB URI found. Set MONGODB_URI or start MongoDB (for example: docker compose -f backend/docker-compose.yaml up -d).',
+  );
+};
+
 describe('puppeteer signup/login flow', () => {
   let browser: Browser | null = null;
   let page: Page | null = null;
@@ -58,6 +87,7 @@ describe('puppeteer signup/login flow', () => {
     }
 
     const root = path.resolve('.');
+    const mongoUri = await resolveMongoUri();
 
     apiProcess = spawn(
       process.execPath,
@@ -65,7 +95,7 @@ describe('puppeteer signup/login flow', () => {
       {
         cwd: root,
         stdio: 'ignore',
-        env: { ...process.env },
+        env: { ...process.env, MONGODB_URI: mongoUri },
       },
     );
 
@@ -135,6 +165,8 @@ describe('puppeteer signup/login flow', () => {
     await page.type('#username', username);
     await pause(500);
     await page.type('#password', password);
+    await pause(500);
+    await page.type('#password-confirm', password);
     await pause(500);
 
     page.once('dialog', async (dialog) => {
