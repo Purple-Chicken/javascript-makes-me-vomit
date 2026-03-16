@@ -1,4 +1,4 @@
-let keyHandler = null;
+let keyHandler: ((e: KeyboardEvent) => void) | null = null;
 
 const html = `
   <h1>Keyboard Listener</h1>
@@ -7,7 +7,13 @@ const html = `
 `;
 
 const onLoad = () => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return;
+  }
   const output = document.getElementById('keyOutput');
+  if (!output) {
+    return;
+  }
   keyHandler = (e) => {
     output.textContent = `Key: ${e.key}, Code: ${e.code}`;
   };  
@@ -15,6 +21,9 @@ const onLoad = () => {
 }
 
 const cleanup = () => {
+  if (typeof window === 'undefined') {
+    return;
+  }
   if (keyHandler) {
     window.removeEventListener('keydown', keyHandler);
   }
