@@ -131,14 +131,14 @@ describe('button navigation', () => {
     const button = { onclick: null as null | (() => void) };
 
     button.onclick = () => {
-      (globalThis as any).location.hash = '#/keyboard';
+      (globalThis as any).location.hash = '#/login';
       handleRoute();
     };
 
     button.onclick();
 
     const app = (globalThis as any).document.getElementById('app');
-    expect(app.innerHTML).toContain('Keyboard Listener');
+    expect(app.innerHTML).toContain('Login');
   });
 });
 

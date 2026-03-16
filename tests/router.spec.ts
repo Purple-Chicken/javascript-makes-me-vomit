@@ -79,7 +79,7 @@ describe('handleRoute', () => {
     };
 
     (globalThis as any).location = {
-      hash: '#/keyboard',
+      hash: '#/login',
     };
 
     (globalThis as any).window = {
@@ -98,10 +98,6 @@ describe('handleRoute', () => {
     handleRoute();
 
     const app = (globalThis as any).document.getElementById('app');
-    expect(app.innerHTML).toContain('Keyboard Listener');
-    expect((globalThis as any).window.addEventListener).toHaveBeenCalledWith(
-      'keydown',
-      jasmine.any(Function),
-    );
+    expect(app.innerHTML).toContain('Login');
   });
 });
