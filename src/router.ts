@@ -6,7 +6,7 @@ import chatModule from './routes/chat.ts';
 import settingsModule from './routes/settings.ts'; // Sidebar
 import historyModule from './routes/history.ts';   // Sidebar
 import accountModule from './routes/account.ts';
-import { startMatrixRain } from './matrixRain.ts';
+import { startMatrixRain } from './lib/matrixRain.ts';
 
 type Module = {
     html: string;
