@@ -25,6 +25,8 @@ const modules: Record<string, Module> = {
   '/signup': { ...signupModule, protected: false },
   '/chat': { ...chatModule, protected: true },
   '/account': { ...accountModule, protected: true },
+  '/settings': { ...settingsModule, protected: true },
+  '/history': { ...historyModule, protected: true },
   '404': { html: '<h1>404</h1><p>Not Found</p>', protected: false },
 
 };
