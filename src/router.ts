@@ -8,7 +8,18 @@ import historyModule from './routes/history.ts';   // Sidebar
 import accountModule from './routes/account.ts';
 import { startMatrixRain } from './matrixRain.ts';
 
-const modules: Record<string, any> = {
+type Module = {
+    html: string;
+    onLoad?: () => void;
+    cleanup?: () => void;
+    protected?: boolean;
+};
+
+type AppLike = {
+    innerHTML: string;
+};
+
+const modules: Record<string, Module> = {
   '/': { ...homeModule, protected: false },
   '/login': { ...loginModule, protected: false },
   '/signup': { ...signupModule, protected: false },
