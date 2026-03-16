@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 // src/router.ts
 import homeModule from './routes/home.ts';
 import signupModule from './routes/signup.ts';
@@ -7,6 +6,7 @@ import chatModule from './routes/chat.ts';
 import settingsModule from './routes/settings.ts'; // Sidebar
 import historyModule from './routes/history.ts';   // Sidebar
 import accountModule from './routes/account.ts';
+import { startMatrixRain } from './matrixRain.ts';
 
 const modules: Record<string, any> = {
   '/': { ...homeModule, protected: false },
@@ -15,26 +15,7 @@ const modules: Record<string, any> = {
   '/chat': { ...chatModule, protected: true }, 
   '/account': { ...accountModule, protected: true },
   '404': { html: '<h1>404</h1><p>Not Found</p>', protected: false },
-=======
-import homeModule from './routes/home.js';
-import keyboardModule from './routes/keyboard.js';
 
-type Module = {
-  html: string;
-  onLoad?: () => void;
-  cleanup?: () => void;
-};
-
-type AppLike = {
-  innerHTML: string;
-};
-
-const modules: Record<string, Module> = {
-  '/': homeModule,
-  '/keyboard': keyboardModule,
-  '404': { html: '<h1>404</h1><p>Not Found</p>',},
-  '500': { html: '<h1>500</h1><p>Internal Server Error</p>' }, 
->>>>>>> origin/testing
 };
 let currentModule: Module | null = null;
 
@@ -92,6 +73,9 @@ export async function handleRoute() {
 }
 
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
-  window.addEventListener('load', handleRoute);
+  window.addEventListener('load', () => {
+    startMatrixRain();
+    handleRoute();
+  });
   window.addEventListener('hashchange', handleRoute);
 }
