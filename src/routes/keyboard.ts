@@ -1,3 +1,4 @@
+// src/routes/keyboard.ts
 let keyHandler = null;
 
 const html = `
