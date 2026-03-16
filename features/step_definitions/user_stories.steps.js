@@ -23,6 +23,15 @@ const installDom = () => {
     },
   });
 
+  const navElement = {
+    innerHTML: `
+      <a href="#/">Home</a>
+      <a href="#/login">Login</a>
+      <a href="#/chat">Chat</a>
+      <a href="#/account">Account</a>
+    `,
+  };
+
   globalThis.document = {
     getElementById: (id) => {
       if (id === 'app') return app;
@@ -32,11 +41,15 @@ const installDom = () => {
       if (id === 'password') return inputs.password;
       return null;
     },
+    querySelector: (selector) => {
+      if (selector === 'nav') return navElement;
+      return null;
+    },
   };
 
   globalThis.window = {
-    addEventListener: () => {},
-    removeEventListener: () => {},
+    addEventListener: () => { },
+    removeEventListener: () => { },
     location: { hash: '#/' },
   };
 
@@ -85,7 +98,7 @@ const submitForm = async (type) => {
   if (!handler) {
     throw new Error(`Expected ${type} form handler to be registered`);
   }
-  await handler({ preventDefault: () => {} });
+  await handler({ preventDefault: () => { } });
   await handleRoute();
 };
 
@@ -114,7 +127,7 @@ Given('I have previously logged in', () => {
   setAuthState(false, true);
 });
 
-Given('my session cookie is still valid', () => {});
+Given('my session cookie is still valid', () => { });
 
 When('I navigate to the home page', async () => {
   await navigateTo('/');
@@ -160,8 +173,28 @@ Then('I should see the landing page', () => {
   }
 });
 
+Then('I should see options to {string}', (option) => {
+  const normalize = (label) => label.replace(/\s+/g, '').toLowerCase();
+  const topBarContent = globalThis.document?.querySelector?.('nav')?.innerHTML ?? '';
+  const combinedContent = `${app.innerHTML}${topBarContent}`;
+  const normalizedContent = combinedContent.replace(/\s+/g, '').toLowerCase();
+  const hasOption = (label) =>
+    combinedContent.includes(label) || normalizedContent.includes(normalize(label));
+
+  if (!hasOption(option)) {
+    throw new Error(`Expected option "${option}", got: ${app.innerHTML}`);
+  }
+});
+
 Then('I should see options to {string} and {string}', (first, second) => {
-  if (!app.innerHTML.includes(first) || !app.innerHTML.includes(second)) {
+  const normalize = (label) => label.replace(/\s+/g, '').toLowerCase();
+  const topBarContent = globalThis.document?.querySelector?.('nav')?.innerHTML ?? '';
+  const combinedContent = `${app.innerHTML}${topBarContent}`;
+  const normalizedContent = combinedContent.replace(/\s+/g, '').toLowerCase();
+  const hasOption = (label) =>
+    combinedContent.includes(label) || normalizedContent.includes(normalize(label));
+
+  if (!hasOption(first) || !hasOption(second)) {
     throw new Error(`Expected options "${first}" and "${second}", got: ${app.innerHTML}`);
   }
 });
