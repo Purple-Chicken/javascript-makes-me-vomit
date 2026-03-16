@@ -1,5 +1,5 @@
 import { Given, When, Then } from '@cucumber/cucumber';
-import { handleRoute } from '../../dist-tests/src/router.js';
+import { handleRoute } from '../../src/router.ts';
 
 let app = null;
 
@@ -8,7 +8,6 @@ Given('the app is loaded', () => {
   globalThis.document = {
     getElementById: (id) => {
       if (id === 'app') return app;
-      if (id === 'keyOutput') return { textContent: '' };
       return null;
     },
   };
@@ -21,9 +20,9 @@ Given('the app is loaded', () => {
   globalThis.location = { hash: '#/' };
 });
 
-When('I navigate to {string}', (path) => {
+When('I navigate to {string}', async (path) => {
   globalThis.location.hash = `#${path}`;
-  handleRoute();
+  await handleRoute();
 });
 
 Then('I should see {string}', (text) => {

@@ -59,7 +59,7 @@ describe('puppeteer visible browser test', () => {
     });
     page = await browser.newPage();
     await page.goto(baseUrl, { waitUntil: 'domcontentloaded' });
-    await pause(2000);
+    await pause(1000);
   });
 
   afterAll(async () => {
@@ -83,11 +83,11 @@ describe('puppeteer visible browser test', () => {
     }
 
     await page.waitForSelector('#app h1');
-    await pause(1000);
+    await pause(500);
     const homeText = await page.$eval('#app h1', (el) =>
       el.textContent?.trim(),
     );
     expect(homeText).toBe('Home');
-    await pause(2500);
+    await pause(1250);
   });
 });
