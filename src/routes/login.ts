@@ -27,7 +27,7 @@ const html=`
             <br>
             <button class="button" type="submit">Login</button>
         </form>
-        <p>Don't have an account? <a href="#/signup">Sign Up</a> </p>
+        <p>Don't have an account? <button class="button" onclick="window.location.hash='#/signup'">Sign Up</button> </p>
     </div>
 `; 
 const onLoad = () => {
