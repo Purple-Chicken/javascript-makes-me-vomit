@@ -1,3 +1,6 @@
+# docker container data
+backend/data/
+
 # Logs
 logs
 *.log
