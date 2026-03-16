@@ -1,5 +1,6 @@
 import homeModule from './routes/home.js';
 import keyboardModule from './routes/keyboard.js';
+import { startMatrixRain } from './matrixRain.ts';
 
 type Module = {
   html: string;
@@ -55,6 +56,9 @@ export function handleRoute() {
 }
 
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
-  window.addEventListener('load', handleRoute);
+  window.addEventListener('load', () => {
+    startMatrixRain();
+    handleRoute();
+  });
   window.addEventListener('hashchange', handleRoute);
 }
