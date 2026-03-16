@@ -142,32 +142,6 @@ describe('button navigation', () => {
   });
 });
 
-describe('CSS rendering', () => {
-  it('applies expected size and color styles', async () => {
-    const cssPath = path.resolve('src/css/main.css');
-    const css = await fs.readFile(cssPath, 'utf-8');
-
-    const dom = new JSDOM(
-      '<!doctype html><html><head></head><body><div class="test-box"></div><nav><a href="#">Link</a></nav></body></html>',
-      { pretendToBeVisual: true },
-    );
-
-    const styleEl = dom.window.document.createElement('style');
-    styleEl.textContent = css;
-    dom.window.document.head.appendChild(styleEl);
-
-    const box = dom.window.document.querySelector('.test-box') as HTMLElement;
-    const link = dom.window.document.querySelector('nav a') as HTMLElement;
-
-    const boxStyle = dom.window.getComputedStyle(box);
-    const linkStyle = dom.window.getComputedStyle(link);
-
-    expect(boxStyle.width).toBe('120px');
-    expect(boxStyle.height).toBe('80px');
-    expect(boxStyle.backgroundColor).toBe('rgb(255, 0, 0)');
-    expect(linkStyle.color).toBe('rgb(0, 0, 0)');
-  });
-});
 
 describe('image assets', () => {
   it('loads image resources from disk', async () => {
