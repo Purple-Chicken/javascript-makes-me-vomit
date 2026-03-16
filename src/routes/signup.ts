@@ -17,8 +17,15 @@ const html=`
                 <span class="error-message"></span>
             </div>
             <br>
+            <div class="input-group">
+                <label for="password-confirm" class="label">Confirm Password</label>
+                <input type="password" id="password-confirm" class="input">
+                <span class="error-message"></span>
+            </div>
+            <br>
             <button class="button" type="submit">Sign Up</button>
         </form>
+        <p>Already have an account? <a href="#/login">Sign In</a> </p>
     </div>
 `; 
 const onLoad = () => {
