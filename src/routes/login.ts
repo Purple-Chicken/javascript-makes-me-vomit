@@ -6,7 +6,7 @@ const html=`
     <div class="container">
         <h2 class="text-center">Login</h2>
         <br>
-        <form id="loginForm class="loginForm">
+        <form id="loginForm" class="loginForm">
             <div class="input-group">
                 <label for="username" class="label">Username</label>
                 <input type="text" id="username" class="input">
