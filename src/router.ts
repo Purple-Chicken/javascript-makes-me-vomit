@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 // src/router.ts
 import homeModule from './routes/home.ts';
 import signupModule from './routes/signup.ts';
@@ -14,10 +15,30 @@ const modules: Record<string, any> = {
   '/chat': { ...chatModule, protected: true }, 
   '/account': { ...accountModule, protected: true },
   '404': { html: '<h1>404</h1><p>Not Found</p>', protected: false },
-};
-let currentModule = null;
+=======
+import homeModule from './routes/home.js';
+import keyboardModule from './routes/keyboard.js';
 
-const renderPage = (app, html) => {
+type Module = {
+  html: string;
+  onLoad?: () => void;
+  cleanup?: () => void;
+};
+
+type AppLike = {
+  innerHTML: string;
+};
+
+const modules: Record<string, Module> = {
+  '/': homeModule,
+  '/keyboard': keyboardModule,
+  '404': { html: '<h1>404</h1><p>Not Found</p>',},
+  '500': { html: '<h1>500</h1><p>Internal Server Error</p>' }, 
+>>>>>>> origin/testing
+};
+let currentModule: Module | null = null;
+
+const renderPage = (app: AppLike, html: string) => {
   app.innerHTML = html;
 }
 
@@ -30,7 +51,7 @@ async function checkAuth() {
   }
 }
 
-export async function router(app, path, modules) {
+export async function router(app: AppLike, path: string, modules: Record<string, Module>) {
   if (typeof currentModule?.cleanup === 'function') {
     try {
       currentModule.cleanup();
@@ -61,6 +82,11 @@ export async function router(app, path, modules) {
 export async function handleRoute() {
   const app = document.getElementById('app');
   const path = location.hash.slice(1) || '/';
+
+  if (!app) {
+    console.error('Route target not found: #app');
+    return;
+  }
 
   await router(app, path, modules);
 }
