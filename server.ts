@@ -59,9 +59,19 @@ app.get('/api/me', (req, res) => {
 });
 
 app.post('/api/logout', (req, res, next) => {
+  // Passport's logout method is now asynchronous and requires a callback
   req.logout((err) => {
-    if (err) return next(err);
-    res.json({ message: 'Logged out' });
+    if (err) {
+      console.error('❌ Logout Error:', err);
+      return res.status(500).json({ error: 'Failed to log out' });
+    }
+    
+    // This clears the session from the server-side store
+    req.session.destroy(() => {
+      res.clearCookie('connect.sid'); // Clear the session cookie on the client
+      res.json({ message: 'Logged out successfully' });
+    });
   });
 });
+
 app.listen(5000, () => console.log('Server running on http://localhost:5000'));
