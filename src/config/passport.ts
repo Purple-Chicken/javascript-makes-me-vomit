@@ -23,20 +23,16 @@ export function configurePassport() {
   }));
 
   // 2. JWT Strategy: For protecting subsequent RESTful requests
-  const jwtOptions = {
+passport.use(new JwtStrategy({
     jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-    secretOrKey: process.env.JWT_SECRET || 'your_secret_key' // Use env variable!
-  };
-
-  passport.use(new JwtStrategy(jwtOptions, async (jwtPayload, done) => {
+    secretOrKey: process.env.JWT_SECRET || 'LOL' 
+  }, async (jwtPayload, done) => {
     try {
       const user = await User.findById(jwtPayload.id);
-      if (user) return done(null, user);
-      return done(null, false);
+      return user ? done(null, user) : done(null, false);
     } catch (err) {
       return done(err, false);
     }
   }));
 
-  // Note: serializeUser and deserializeUser are removed as they are for sessions.
 }

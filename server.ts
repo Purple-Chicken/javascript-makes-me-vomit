@@ -2,6 +2,7 @@ import express from 'express';
 import passport from 'passport';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
+import jwt from 'jsonwebtoken';
 import { configurePassport } from './src/config/passport';
 import { User } from './src/models/User';
 import bcrypt from 'bcryptjs';
@@ -9,6 +10,10 @@ import bcrypt from 'bcryptjs';
 dotenv.config();
 const app = express();
 const JWT_SECRET = process.env.JWT_SECRET || 'LOL'; 
+
+mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/sha257')
+  .then(() => console.log('✅ MongoDB Connected'))
+  .catch(err => console.error('❌ MongoDB Connection Error:', err));
 
 // Middleware
 app.use(express.json());
@@ -34,7 +39,7 @@ app.post('/api/sessions', (req, res, next) => {
     }
 
     // Sign the token with the user ID
-    const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: '1d' });
+    const token = jwt.sign({ id: user._id.toString() }, JWT_SECRET, { expiresIn: '1d' });
     res.json({ message: "Logged in", token, user: { username: user.username } });
   })(req, res, next);
 });
@@ -42,11 +47,11 @@ app.post('/api/sessions', (req, res, next) => {
 // Helper for protected routes
 const authenticateJWT = passport.authenticate('jwt', { session: false });
 
-app.get('/api/users/me', authenticateJWT, (req, res) => {
+app.get('/api/me', authenticateJWT, (req, res) => {
   res.json(req.user);
 });
 
-app.patch('/api/users/me', authenticateJWT, async (req, res) => {
+app.patch('/api/me', authenticateJWT, async (req, res) => {
   try {
     const { password } = req.body;
     const hashedPassword = await bcrypt.hash(password, 10);
