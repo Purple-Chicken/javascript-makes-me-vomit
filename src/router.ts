@@ -50,9 +50,16 @@ export function handleRoute() {
 
   // Update nav active state
   const navLinks = document.querySelectorAll('nav a');
+  // Show all links first
+  navLinks.forEach(link => link.style.display = '');
+  // Remove active class from all
   navLinks.forEach(link => link.classList.remove('active'));
+  // Set active and hide the current page link
   const activeLink = document.querySelector(`nav a[data-route="${path}"]`);
-  if (activeLink) activeLink.classList.add('active');
+  if (activeLink) {
+    activeLink.classList.add('active');
+    activeLink.style.display = 'none';
+  }
 }
 
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
