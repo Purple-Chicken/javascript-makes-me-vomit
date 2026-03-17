@@ -1,7 +1,7 @@
 // src/routes/signup.ts
 const html=`
 <h1>Account Settings</h1>
-    <div class="container">
+    <div class="box-container">
         <h2 class="text-center">Change Password</h2>
         <br>
         <form id="changepwdForm" class="changepwdForm">
