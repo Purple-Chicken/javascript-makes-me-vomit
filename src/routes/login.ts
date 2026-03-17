@@ -36,7 +36,7 @@ const onLoad = () => {
       e.preventDefault();
       const username = (document.getElementById('username') as HTMLInputElement).value;
       const password = (document.getElementById('password') as HTMLInputElement).value;
-      const rememberMe = (document.getElementById('remember-me') as HTMLInputElement).checked;
+      const rememberMe = (document.getElementById('remember-me') as HTMLInputElement | null)?.checked ?? false;
 
       const response = await fetch('/api/sessions', {
         method: 'POST',
