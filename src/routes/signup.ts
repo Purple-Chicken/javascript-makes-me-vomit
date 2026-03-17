@@ -14,13 +14,13 @@ const html=`
             <div class="input-group">
                 <label for="password" class="label">Password</label>
                 <input type="password" id="password" class="input">
-                <span class="error-message"></span>
+                <span id="password-error" class="error-message"></span>
             </div>
             <br>
             <div class="input-group">
                 <label for="password-confirm" class="label">Confirm Password</label>
                 <input type="password" id="password-confirm" class="input">
-                <span class="error-message"></span>
+                <span id="match-error" class="error-message"></span>
             </div>
             <br>
             <button class="button" type="submit">Sign Up</button>
@@ -30,13 +30,42 @@ const html=`
 `; 
 const onLoad = () => {
     const form = document.getElementById('signupForm') as HTMLFormElement;
+    const passwordInput = document.getElementById('password') as HTMLInputElement;
+    const confirmInput = document.getElementById('password-confirm') as HTMLInputElement;
+    const passwordError = document.getElementById('password-error');
+    const matchError = document.getElementById('match-error');
+
+    const validate = () => {
+      let isValid = true;
+      // Strength check (8 characters minimum)
+      if (passwordInput.value.length > 0 && passwordInput.value.length < 8) {
+        if (passwordError) passwordError.textContent = 'Password is too weak (min 8 chars).';
+        isValid = false;
+      } else if (passwordError) {
+        passwordError.textContent = '';
+      }
+      // Match check
+      if (confirmInput.value.length > 0 && passwordInput.value !== confirmInput.value) {
+        if (matchError) matchError.textContent = 'Passwords do not match.';
+        isValid = false;
+      } else if (matchError) {
+        matchError.textContent = '';
+      }
+      return isValid;
+    };
+
+    passwordInput?.addEventListener('input', validate);
+    confirmInput?.addEventListener('input', validate);
+
     form?.addEventListener('submit', async (e) => {
       e.preventDefault();
-      
-      const username = (document.getElementById('username') as HTMLInputElement).value;
-      const password = (document.getElementById('password') as HTMLInputElement).value;
+    
+      if (!validate()) return;     
 
-      const response = await fetch('/api/signup', {
+      const username = (document.getElementById('username') as HTMLInputElement).value;
+      const password = passwordInput.value;
+
+      const response = await fetch('/api/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password })
