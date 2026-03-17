@@ -39,7 +39,7 @@ const renderPage = (app: AppLike, html: string) => {
 async function checkAuth() {
   try {
     const token = localStorage.getItem('token');
-    if (!token) {
+    if (!token || token === 'undefined') {
       return false;
     }
     const res = await fetch('/api/users/me', {

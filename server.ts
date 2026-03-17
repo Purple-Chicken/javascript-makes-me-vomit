@@ -15,6 +15,10 @@ const MONGODB_URI =
   process.env.MONGODB_URI ||
   'mongodb://admin:admin@127.0.0.1:27017/mydb?authSource=admin';
 
+mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/sha257')
+  .then(() => console.log('✅ MongoDB Connected'))
+  .catch(err => console.error('❌ MongoDB Connection Error:', err));
+
 // Middleware
 app.use(express.json());
 configurePassport();
@@ -39,7 +43,7 @@ app.post('/api/sessions', (req, res, next) => {
     }
 
     // Sign the token with the user ID
-    const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: '1d' });
+    const token = jwt.sign({ id: user._id.toString() }, JWT_SECRET, { expiresIn: '1d' });
     res.json({ message: "Logged in", token, user: { username: user.username } });
   })(req, res, next);
 });

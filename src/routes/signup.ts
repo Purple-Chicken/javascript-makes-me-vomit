@@ -1,7 +1,7 @@
 // src/routes/signup.ts
 const html=`
+    <div class="box-container">
 <h1>Sign Up</h1>
-    <div class="container">
         <h2 class="text-center">Sign Up</h2>
         <br>
         <form id="signupForm" class="signupForm">
