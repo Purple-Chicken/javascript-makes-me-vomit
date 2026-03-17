@@ -51,11 +51,11 @@ app.post('/api/sessions', (req, res, next) => {
 // Helper for protected routes
 const authenticateJWT = passport.authenticate('jwt', { session: false });
 
-app.get('/api/me', authenticateJWT, (req, res) => {
+app.get('/api/users/me', authenticateJWT, (req, res) => {
   res.json(req.user);
 });
 
-app.patch('/api/me', authenticateJWT, async (req, res) => {
+app.patch('/api/users/me', authenticateJWT, async (req, res) => {
   try {
     const { password } = req.body;
     const hashedPassword = await bcrypt.hash(password, 10);
