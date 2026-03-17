@@ -82,6 +82,59 @@ describe('mongo database', () => {
       await client.close();
     }
   });
+
+  it('can update an existing user record', async () => {
+    const client = new MongoClient(mongoUri);
+    const username = `jasmine_update_${Date.now()}`;
+
+    try {
+      await client.connect();
+      const db = client.db();
+      const users = db.collection('users');
+
+      await users.insertOne({ username, role: 'member' });
+      const updateResult = await users.updateOne(
+        { username },
+        { $set: { role: 'admin' } }
+      );
+
+      expect(updateResult.matchedCount).toBe(1);
+      expect(updateResult.modifiedCount).toBe(1);
+
+      const updatedUser = await users.findOne({ username });
+      expect(updatedUser?.role).toBe('admin');
+    } finally {
+      await client.db().collection('users').deleteMany({ username });
+      await client.close();
+    }
+  });
+
+  it('rejects duplicate usernames with a unique index', async () => {
+    const client = new MongoClient(mongoUri);
+    const username = `jasmine_dupe_${Date.now()}`;
+    const collectionName = `users_unique_${Date.now()}`;
+
+    try {
+      await client.connect();
+      const db = client.db();
+      const users = db.collection(collectionName);
+      await users.createIndex({ username: 1 }, { unique: true });
+
+      await users.insertOne({ username, password: 'first' });
+      await expectAsync(users.insertOne({ username, password: 'second' })).toBeRejectedWithError(
+        /E11000/
+      );
+    } finally {
+      const db = client.db();
+      const collectionExists = await db
+        .listCollections({ name: collectionName }, { nameOnly: true })
+        .hasNext();
+      if (collectionExists) {
+        await db.dropCollection(collectionName);
+      }
+      await client.close();
+    }
+  });
 });
 
 describe('routing status', () => {

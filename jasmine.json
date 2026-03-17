@@ -1,5 +1,14 @@
 {
   "spec_dir": "tests",
-  "spec_files": ["**/*[sS]pec.ts", "**/*[sS]pec.js"],
+  "spec_files": [
+    "app.spec.ts",
+    "router.spec.ts",
+    "auth-routes.spec.ts",
+    "api-account.spec.ts",
+    "api-auth.spec.ts",
+    "route-modules.spec.ts",
+    "matrix-rain.spec.ts",
+    "**/*[sS]pec.js"
+  ],
   "helpers": []
 }

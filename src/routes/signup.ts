@@ -75,8 +75,16 @@ const onLoad = () => {
         alert('Account created! Please log in.');
         window.location.hash = '#/login';
       } else {
-        const errorData = await response.json();
-        alert(errorData.error || 'Signup failed');
+        let message = 'Signup failed';
+        try {
+          const errorData = await response.json();
+          if (typeof errorData?.error === 'string' && errorData.error.trim()) {
+            message = errorData.error;
+          }
+        } catch {
+          // Keep generic message when response body is not valid JSON.
+        }
+        alert(message);
       }
     });
   };

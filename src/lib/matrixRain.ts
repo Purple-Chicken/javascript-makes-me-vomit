@@ -11,8 +11,11 @@ export function startMatrixRain(canvasId = 'matrix-canvas') {
   let width = window.innerWidth;
   let height = window.innerHeight;
 
+  const createDrops = (count: number) =>
+    Array.from({ length: count }, () => ({ y: 0, chars: [] }));
+
   let columns = Math.floor(width / fontSize);
-  const drops: { y: number; chars: string[] }[] = Array.from({ length: columns }, () => ({ y: 0, chars: [] }));
+  let drops: { y: number; chars: string[] }[] = createDrops(columns);
 
   const resize = () => {
     width = window.innerWidth;
@@ -20,11 +23,7 @@ export function startMatrixRain(canvasId = 'matrix-canvas') {
     canvas.width = width;
     canvas.height = height;
     columns = Math.floor(width / fontSize);
-    drops.length = columns;
-    drops.forEach(drop => {
-      drop.y = 0;
-      drop.chars = [];
-    });
+    drops = createDrops(columns);
   };
 
   window.addEventListener('resize', resize);

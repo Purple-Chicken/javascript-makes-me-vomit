@@ -1,0 +1,9 @@
+{
+  "spec_dir": "tests",
+  "spec_files": [
+    "puppeteer.spec.ts",
+    "puppeteer-auth.spec.ts",
+    "puppeteer-visible.spec.ts"
+  ],
+  "helpers": []
+}

@@ -26,7 +26,8 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "node --import tsx --experimental-vm-modules ./node_modules/jasmine/bin/jasmine.js --config=jasmine.json",
-    "acceptance": "tsc -p tsconfig.spec.json && cucumber-js"
+    "puppeteer": "node --import tsx --experimental-vm-modules ./node_modules/jasmine/bin/jasmine.js --config=jasmine.puppeteer.json",
+    "acceptance": "tsc -p tsconfig.spec.json --noEmit && node --import tsx ./node_modules/@cucumber/cucumber/bin/cucumber.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
