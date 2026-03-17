@@ -2,8 +2,8 @@
 
 
 const html=`
+    <div class="box-container">
 <h1>Login</h1>
-    <div class="container">
         <h2 class="text-center">Login</h2>
         <br>
         <form id="loginForm" class="loginForm">
