@@ -37,15 +37,17 @@ const onLoad = () => {
 
     const validate = () => {
       let isValid = true;
+      const passwordValue = typeof passwordInput?.value === 'string' ? passwordInput.value : '';
+      const confirmValue = typeof confirmInput?.value === 'string' ? confirmInput.value : '';
       // Strength check (8 characters minimum)
-      if (passwordInput.value.length > 0 && passwordInput.value.length < 8) {
+      if (passwordValue.length > 0 && passwordValue.length < 8) {
         if (passwordError) passwordError.textContent = 'Password is too weak (min 8 chars).';
         isValid = false;
       } else if (passwordError) {
         passwordError.textContent = '';
       }
       // Match check
-      if (confirmInput.value.length > 0 && passwordInput.value !== confirmInput.value) {
+      if (confirmValue.length > 0 && passwordValue !== confirmValue) {
         if (matchError) matchError.textContent = 'Passwords do not match.';
         isValid = false;
       } else if (matchError) {
@@ -54,8 +56,12 @@ const onLoad = () => {
       return isValid;
     };
 
-    passwordInput?.addEventListener('input', validate);
-    confirmInput?.addEventListener('input', validate);
+    if (typeof passwordInput?.addEventListener === 'function') {
+      passwordInput.addEventListener('input', validate);
+    }
+    if (typeof confirmInput?.addEventListener === 'function') {
+      confirmInput.addEventListener('input', validate);
+    }
 
     form?.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -63,7 +69,7 @@ const onLoad = () => {
       if (!validate()) return;     
 
       const username = (document.getElementById('username') as HTMLInputElement).value;
-      const password = passwordInput.value;
+      const password = typeof passwordInput?.value === 'string' ? passwordInput.value : '';
 
       const response = await fetch('/api/users', {
         method: 'POST',

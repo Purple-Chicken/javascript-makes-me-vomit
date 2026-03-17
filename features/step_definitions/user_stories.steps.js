@@ -6,6 +6,7 @@ let authState = { loggedIn: false, sessionValid: false };
 let formHandlers = { login: null, signup: null };
 let inputs = { username: { value: '' }, password: { value: '' } };
 let alerts = [];
+let storage = {};
 
 const isAuthenticated = () => authState.loggedIn || authState.sessionValid;
 
@@ -14,6 +15,7 @@ const installDom = () => {
   formHandlers = { login: null, signup: null };
   inputs = { username: { value: '' }, password: { value: '' } };
   alerts = [];
+  storage = {};
 
   const makeForm = (type) => ({
     addEventListener: (event, handler) => {
@@ -55,19 +57,30 @@ const installDom = () => {
 
   globalThis.location = globalThis.window.location;
   globalThis.alert = (message) => alerts.push(message);
+  globalThis.localStorage = {
+    getItem: (key) => storage[key] ?? null,
+    setItem: (key, value) => {
+      storage[key] = String(value);
+    },
+    removeItem: (key) => {
+      delete storage[key];
+    },
+    clear: () => {
+      storage = {};
+    },
+  };
 };
 
 const installFetchMock = () => {
   globalThis.fetch = async (url) => {
-    if (url === '/api/me') {
+    if (url === '/api/users/me') {
       return { ok: isAuthenticated() };
     }
-    if (url === '/api/login') {
+    if (url === '/api/sessions') {
       authState.loggedIn = true;
-      return { ok: true, json: async () => ({}) };
+      return { ok: true, json: async () => ({ token: 'test-token' }) };
     }
-    if (url === '/api/signup') {
-      authState.loggedIn = true;
+    if (url === '/api/users') {
       return { ok: true, json: async () => ({}) };
     }
     return { ok: false, json: async () => ({}) };
