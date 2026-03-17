@@ -149,7 +149,7 @@ describe('handleRoute', () => {
     };
     spyOn(globalThis as any, 'fetch').and.resolveTo({ ok: true } as Response);
 
-    const hashes = ['#/settings', '#/history', '#/keyboard'];
+    const hashes = ['#/settings', '#/history', '#/login', '#/account', '#/'];
     for (const hash of hashes) {
       (globalThis as any).location.hash = hash;
       await handleRoute();
