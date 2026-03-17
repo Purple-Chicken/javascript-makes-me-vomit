@@ -1,98 +1,34 @@
-import net from 'node:net';
 import path from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
+import {
+  createApiRequest,
+  getAvailablePort,
+  resolveWritableMongoUri,
+  waitForPort,
+} from './helpers/api-test-utils.ts';
 
 describe('user account API', () => {
-  const baseUrl = 'http://127.0.0.1:5000';
-  let apiProcess: ChildProcess | null = null;
-  let startedByTest = false;
-  let originalTimeout = 0;
-
-  const waitFor = (ms: number) =>
-    new Promise((resolve) => {
-      setTimeout(resolve, ms);
-    });
-
-  const isPortOpen = async (host: string, port: number): Promise<boolean> =>
-    await new Promise((resolve) => {
-      const socket = net.createConnection({ host, port }, () => {
-        socket.end();
-        resolve(true);
-      });
-      socket.setTimeout(750, () => {
-        socket.destroy();
-        resolve(false);
-      });
-      socket.on('error', () => resolve(false));
-    });
-
-  const waitForPort = async (host: string, port: number, timeoutMs = 20000) => {
-    const start = Date.now();
-    while (Date.now() - start < timeoutMs) {
-      if (await isPortOpen(host, port)) {
-        return;
-      }
-      await waitFor(250);
+  const stopProcess = async (child: ChildProcess | null) => {
+    if (!child || child.killed) {
+      return;
     }
-    throw new Error(`Timeout waiting for ${host}:${port}`);
-  };
-
-  const mergeCookies = (currentJar: string, headers: Headers): string => {
-    const byName = new Map<string, string>();
-    if (currentJar) {
-      for (const cookie of currentJar.split(';').map((part) => part.trim())) {
-        const [name, value] = cookie.split('=');
-        if (name && typeof value !== 'undefined') {
-          byName.set(name, value);
+    await new Promise<void>((resolve) => {
+      const timer = setTimeout(() => {
+        if (!child.killed) {
+          child.kill('SIGKILL');
         }
-      }
-    }
-
-    const headerAny = headers as any;
-    const setCookies: string[] =
-      typeof headerAny.getSetCookie === 'function'
-        ? headerAny.getSetCookie()
-        : headers.get('set-cookie')
-          ? [headers.get('set-cookie') as string]
-          : [];
-
-    for (const setCookie of setCookies) {
-      const [cookiePair] = setCookie.split(';');
-      const [name, value] = cookiePair.split('=');
-      if (name && typeof value !== 'undefined') {
-        byName.set(name.trim(), value.trim());
-      }
-    }
-
-    return Array.from(byName.entries())
-      .map(([name, value]) => `${name}=${value}`)
-      .join('; ');
-  };
-
-  const apiRequest = async (
-    endpoint: string,
-    options: RequestInit = {},
-    cookieJar = '',
-  ): Promise<{ status: number; body: any; cookieJar: string }> => {
-    const headers = new Headers(options.headers);
-    if (cookieJar) {
-      headers.set('cookie', cookieJar);
-    }
-
-    const response = await fetch(`${baseUrl}${endpoint}`, {
-      ...options,
-      headers,
+      }, 1000);
+      child.once('exit', () => {
+        clearTimeout(timer);
+        resolve();
+      });
+      child.kill('SIGTERM');
     });
-    const nextJar = mergeCookies(cookieJar, response.headers);
-    const contentType = response.headers.get('content-type') ?? '';
-    const text = await response.text();
-    const body =
-      contentType.includes('application/json') && text
-        ? JSON.parse(text)
-        : text;
-
-    return { status: response.status, body, cookieJar: nextJar };
   };
+
+  let apiProcess: ChildProcess | null = null;
+  let originalTimeout = 0;
+  let apiRequest: ReturnType<typeof createApiRequest>;
 
   beforeAll(async () => {
     if (typeof jasmine !== 'undefined') {
@@ -100,38 +36,36 @@ describe('user account API', () => {
       jasmine.DEFAULT_TIMEOUT_INTERVAL = 60000;
     }
 
-    const alreadyRunning = await isPortOpen('127.0.0.1', 5000);
-    if (!alreadyRunning) {
-      const root = path.resolve('.');
-      apiProcess = spawn(
-        process.execPath,
-        ['--import', 'tsx', path.join(root, 'server.ts')],
-        {
-          cwd: root,
-          stdio: 'ignore',
-          env: { ...process.env },
-        },
-      );
-      startedByTest = true;
-    }
+    const root = path.resolve('.');
+    const port = await getAvailablePort();
+    const mongoUri = await resolveWritableMongoUri();
+    apiRequest = createApiRequest(`http://127.0.0.1:${port}`);
 
-    await waitForPort('127.0.0.1', 5000, 25000);
+    apiProcess = spawn(
+      process.execPath,
+      ['--import', 'tsx', path.join(root, 'server.ts')],
+      {
+        cwd: root,
+        stdio: 'ignore',
+        env: { ...process.env, PORT: String(port), MONGODB_URI: mongoUri },
+      },
+    );
+
+    await waitForPort('127.0.0.1', port, 25000);
   });
 
-  afterAll(() => {
-    if (startedByTest && apiProcess && !apiProcess.killed) {
-      apiProcess.kill('SIGTERM');
-    }
+  afterAll(async () => {
+    await stopProcess(apiProcess);
     if (typeof jasmine !== 'undefined') {
       jasmine.DEFAULT_TIMEOUT_INTERVAL = originalTimeout;
     }
   });
 
-  it('creates a user with POST /api/signup', async () => {
+  it('creates a user with POST /api/users', async () => {
     const username = `api_spec_create_${Date.now()}`;
     const password = 'create-pass-123';
 
-    const signup = await apiRequest('/api/signup', {
+    const signup = await apiRequest('/api/users', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
@@ -139,7 +73,7 @@ describe('user account API', () => {
     expect(signup.status).toBe(201);
     expect(signup.body.message).toBe('User created');
 
-    const login = await apiRequest('/api/login', {
+    const login = await apiRequest('/api/sessions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
@@ -147,47 +81,45 @@ describe('user account API', () => {
     expect(login.status).toBe(200);
   });
 
-  it('modifies an account password with PATCH /api/change-password', async () => {
+  it('modifies an account password with PATCH /api/users/me', async () => {
     const username = `api_spec_modify_${Date.now()}`;
     const oldPassword = 'old-pass-123';
     const newPassword = 'new-pass-456';
-    let cookieJar = '';
 
-    const signup = await apiRequest('/api/signup', {
+    await apiRequest('/api/users', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password: oldPassword }),
     });
-    expect(signup.status).toBe(201);
 
-    const loginOld = await apiRequest('/api/login', {
+    const loginOld = await apiRequest('/api/sessions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password: oldPassword }),
-    }, cookieJar);
-    cookieJar = loginOld.cookieJar;
+    });
+    const token = loginOld.body.token as string;
     expect(loginOld.status).toBe(200);
 
-    const changePassword = await apiRequest('/api/change-password', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password: newPassword }),
-    }, cookieJar);
+    const changePassword = await apiRequest(
+      '/api/users/me',
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: newPassword }),
+      },
+      token,
+    );
     expect(changePassword.status).toBe(200);
     expect(changePassword.body.message).toContain('Password updated');
 
-    const logout = await apiRequest('/api/logout', { method: 'POST' }, cookieJar);
-    cookieJar = logout.cookieJar;
-    expect(logout.status).toBe(200);
-
-    const loginWithOld = await apiRequest('/api/login', {
+    const loginWithOld = await apiRequest('/api/sessions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password: oldPassword }),
     });
-    expect(loginWithOld.status).toBe(401);
+    expect(loginWithOld.status).toBe(400);
 
-    const loginWithNew = await apiRequest('/api/login', {
+    const loginWithNew = await apiRequest('/api/sessions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password: newPassword }),
@@ -195,37 +127,83 @@ describe('user account API', () => {
     expect(loginWithNew.status).toBe(200);
   });
 
-  it('deletes an account with DELETE /api/delete-user', async () => {
+  it('deletes an account with DELETE /api/users/me', async () => {
     const username = `api_spec_delete_${Date.now()}`;
     const password = 'delete-pass-123';
-    let cookieJar = '';
 
-    const signup = await apiRequest('/api/signup', {
+    const signup = await apiRequest('/api/users', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
     });
     expect(signup.status).toBe(201);
 
-    const login = await apiRequest('/api/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
-    }, cookieJar);
-    cookieJar = login.cookieJar;
-    expect(login.status).toBe(200);
-
-    const deleteUser = await apiRequest('/api/delete-user', {
-      method: 'DELETE',
-    }, cookieJar);
-    expect(deleteUser.status).toBe(200);
-    expect(deleteUser.body.message).toContain('User deleted');
-
-    const loginAfterDelete = await apiRequest('/api/login', {
+    const login = await apiRequest('/api/sessions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
     });
-    expect(loginAfterDelete.status).toBe(401);
+    const token = login.body.token as string;
+    expect(login.status).toBe(200);
+
+    const deleteUser = await apiRequest('/api/users/me', { method: 'DELETE' }, token);
+    expect(deleteUser.status).toBe(200);
+    expect(deleteUser.body.message).toContain('User deleted');
+
+    const meAfterDelete = await apiRequest('/api/users/me', {}, token);
+    expect(meAfterDelete.status).toBe(401);
+
+    const loginAfterDelete = await apiRequest('/api/sessions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    expect(loginAfterDelete.status).toBe(400);
+  });
+
+  it('rejects change password without an authenticated token', async () => {
+    const res = await apiRequest('/api/users/me', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: 'new-pass-123' }),
+    });
+
+    expect(res.status).toBe(401);
+  });
+
+  it('rejects delete user without an authenticated token', async () => {
+    const res = await apiRequest('/api/users/me', {
+      method: 'DELETE',
+    });
+
+    expect(res.status).toBe(401);
+  });
+
+  it('rejects change password when password is missing', async () => {
+    const username = `change_missing_${Date.now()}`;
+    const password = 'old-pass-123';
+
+    await apiRequest('/api/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    const login = await apiRequest('/api/sessions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+
+    const res = await apiRequest(
+      '/api/users/me',
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      },
+      login.body.token as string,
+    );
+
+    expect(res.status).toBeGreaterThanOrEqual(400);
   });
 });

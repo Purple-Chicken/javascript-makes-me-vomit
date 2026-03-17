@@ -8,12 +8,18 @@ describe('router', () => {
       removeEventListener: jasmine.createSpy('removeEventListener'),
     };
     (globalThis as any).location = (globalThis as any).window.location;
+    (globalThis as any).localStorage = {
+      getItem: jasmine.createSpy('getItem').and.returnValue(null),
+      setItem: jasmine.createSpy('setItem'),
+      removeItem: jasmine.createSpy('removeItem'),
+    };
   });
 
   afterEach(() => {
     delete (globalThis as any).window;
     delete (globalThis as any).document;
     delete (globalThis as any).location;
+    delete (globalThis as any).localStorage;
   });
 
   it('renders html and calls onLoad when present', async () => {
@@ -76,14 +82,15 @@ describe('router', () => {
 
     await router(app as any, '/chat', modules as any);
 
-    expect(fetchSpy).toHaveBeenCalledWith('/api/me');
+    expect(fetchSpy).not.toHaveBeenCalled();
     expect((globalThis as any).window.location.hash).toBe('#/login');
     expect(app.innerHTML).toBe('');
   });
 
   it('renders protected routes when authenticated', async () => {
     const app = { innerHTML: '' };
-    spyOn(globalThis as any, 'fetch').and.resolveTo({ ok: true } as Response);
+    (globalThis as any).localStorage.getItem.and.returnValue('jwt-token-1');
+    const fetchSpy = spyOn(globalThis as any, 'fetch').and.resolveTo({ ok: true } as Response);
     const modules = {
       '/chat': { html: '<h1>Chat</h1>', protected: true },
       '404': { html: '<h1>404</h1>' },
@@ -91,7 +98,65 @@ describe('router', () => {
 
     await router(app as any, '/chat', modules as any);
 
+    expect(fetchSpy).toHaveBeenCalledWith('/api/users/me', {
+      headers: {
+        Authorization: 'Bearer jwt-token-1',
+      },
+    });
     expect(app.innerHTML).toBe('<h1>Chat</h1>');
+  });
+
+  it('runs cleanup once and invokes onLoad on protected route transitions', async () => {
+    const app = { innerHTML: '' };
+    let cleanupCount = 0;
+    let chatLoadCount = 0;
+    let settingsLoadCount = 0;
+    (globalThis as any).localStorage.getItem.and.returnValue('jwt-token-1');
+    spyOn(globalThis as any, 'fetch').and.resolveTo({ ok: true } as Response);
+
+    const modules = {
+      '/chat': {
+        html: '<h1>Chat</h1>',
+        protected: true,
+        onLoad: () => {
+          chatLoadCount += 1;
+        },
+        cleanup: () => {
+          cleanupCount += 1;
+        },
+      },
+      '/settings': {
+        html: '<h1>Settings</h1>',
+        protected: true,
+        onLoad: () => {
+          settingsLoadCount += 1;
+        },
+      },
+      '404': { html: '<h1>404</h1>' },
+    };
+
+    await router(app as any, '/chat', modules as any);
+    await router(app as any, '/settings', modules as any);
+
+    expect(chatLoadCount).toBe(1);
+    expect(settingsLoadCount).toBe(1);
+    expect(cleanupCount).toBe(1);
+    expect(app.innerHTML).toBe('<h1>Settings</h1>');
+  });
+
+  it('redirects to login when auth check fails due to network error', async () => {
+    const app = { innerHTML: '' };
+    (globalThis as any).localStorage.getItem.and.returnValue('jwt-token-1');
+    spyOn(globalThis as any, 'fetch').and.rejectWith(new Error('network down'));
+    const modules = {
+      '/chat': { html: '<h1>Chat</h1>', protected: true },
+      '404': { html: '<h1>404</h1>' },
+    };
+
+    await router(app as any, '/chat', modules as any);
+
+    expect((globalThis as any).window.location.hash).toBe('#/login');
+    expect(app.innerHTML).toBe('');
   });
 });
 
@@ -116,12 +181,18 @@ describe('handleRoute', () => {
       addEventListener: jasmine.createSpy('addEventListener'),
       removeEventListener: jasmine.createSpy('removeEventListener'),
     };
+    (globalThis as any).localStorage = {
+      getItem: jasmine.createSpy('getItem').and.returnValue('jwt-token-1'),
+      setItem: jasmine.createSpy('setItem'),
+      removeItem: jasmine.createSpy('removeItem'),
+    };
   });
 
   afterEach(() => {
     delete (globalThis as any).window;
     delete (globalThis as any).document;
     delete (globalThis as any).location;
+    delete (globalThis as any).localStorage;
   });
 
   it('renders the route based on the hash', async () => {

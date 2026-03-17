@@ -38,7 +38,15 @@ const renderPage = (app: AppLike, html: string) => {
 
 async function checkAuth() {
   try {
-    const res = await fetch('/api/me');
+    const token = localStorage.getItem('token');
+    if (!token) {
+      return false;
+    }
+    const res = await fetch('/api/users/me', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
     return res.ok; // Returns true if 200 OK, false if 401
   } catch {
     return false;

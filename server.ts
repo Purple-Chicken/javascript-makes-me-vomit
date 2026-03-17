@@ -2,6 +2,7 @@ import express from 'express';
 import passport from 'passport';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
+import jwt from 'jsonwebtoken';
 import { configurePassport } from './src/config/passport';
 import { User } from './src/models/User';
 import bcrypt from 'bcryptjs';
@@ -9,6 +10,10 @@ import bcrypt from 'bcryptjs';
 dotenv.config();
 const app = express();
 const JWT_SECRET = process.env.JWT_SECRET || 'LOL'; 
+const PORT = Number(process.env.PORT || '5000');
+const MONGODB_URI =
+  process.env.MONGODB_URI ||
+  'mongodb://admin:admin@127.0.0.1:27017/mydb?authSource=admin';
 
 // Middleware
 app.use(express.json());
@@ -65,4 +70,13 @@ app.delete('/api/users/me', authenticateJWT, async (req, res) => {
     res.status(500).json({ error: 'Deletion failed' });
   }
 });
-app.listen(5000, () => console.log('Server running on http://localhost:5000'));
+
+const startServer = async () => {
+  await mongoose.connect(MONGODB_URI);
+  app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+};
+
+startServer().catch((err) => {
+  console.error('Failed to start API server:', err);
+  process.exit(1);
+});

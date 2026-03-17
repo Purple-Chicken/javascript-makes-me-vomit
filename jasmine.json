@@ -6,6 +6,8 @@
     "auth-routes.spec.ts",
     "api-account.spec.ts",
     "api-auth.spec.ts",
+    "route-modules.spec.ts",
+    "matrix-rain.spec.ts",
     "**/*[sS]pec.js"
   ],
   "helpers": []

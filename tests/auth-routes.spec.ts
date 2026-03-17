@@ -32,6 +32,11 @@ describe('login route', () => {
     (globalThis as any).window = { location: { hash: '#/login' } };
     (globalThis as any).location = (globalThis as any).window.location;
     (globalThis as any).alert = jasmine.createSpy('alert');
+    (globalThis as any).localStorage = {
+      setItem: jasmine.createSpy('setItem'),
+      getItem: jasmine.createSpy('getItem').and.returnValue(null),
+      removeItem: jasmine.createSpy('removeItem'),
+    };
   });
 
   afterEach(() => {
@@ -39,30 +44,38 @@ describe('login route', () => {
     delete (globalThis as any).window;
     delete (globalThis as any).location;
     delete (globalThis as any).alert;
+    delete (globalThis as any).localStorage;
   });
 
   it('posts credentials and redirects to chat on success', async () => {
-    const fetchSpy = spyOn(globalThis as any, 'fetch').and.resolveTo({ ok: true } as Response);
+    const fetchSpy = spyOn(globalThis as any, 'fetch').and.resolveTo({
+      ok: true,
+      json: async () => ({ token: 'jwt-token-1' }),
+    } as Response);
 
     loginModule.onLoad?.();
     await submitHandler?.({ preventDefault: () => {} });
 
-    expect(fetchSpy).toHaveBeenCalledWith('/api/login', jasmine.objectContaining({
+    expect(fetchSpy).toHaveBeenCalledWith('/api/sessions', jasmine.objectContaining({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
     }));
     const [, options] = fetchSpy.calls.mostRecent().args as [string, { body: string }];
     expect(options.body).toBe(JSON.stringify({ username: 'alice', password: 'hunter2' }));
+    expect((globalThis as any).localStorage.setItem).toHaveBeenCalledWith('token', 'jwt-token-1');
     expect((globalThis as any).window.location.hash).toBe('#/chat');
   });
 
   it('alerts on failed login', async () => {
-    spyOn(globalThis as any, 'fetch').and.resolveTo({ ok: false } as Response);
+    spyOn(globalThis as any, 'fetch').and.resolveTo({
+      ok: false,
+      json: async () => ({ error: 'Incorrect password.' }),
+    } as Response);
 
     loginModule.onLoad?.();
     await submitHandler?.({ preventDefault: () => {} });
 
-    expect((globalThis as any).alert).toHaveBeenCalledWith('Login failed');
+    expect((globalThis as any).alert).toHaveBeenCalledWith('Incorrect password.');
   });
 });
 
@@ -70,7 +83,10 @@ describe('signup route', () => {
   let submitHandler: SubmitHandler | null = null;
   let form: { addEventListener: (event: string, handler: SubmitHandler) => void };
   let usernameInput: { value: string };
-  let passwordInput: { value: string };
+  let passwordInput: { value: string; addEventListener: (event: string, handler: () => void) => void };
+  let confirmInput: { value: string; addEventListener: (event: string, handler: () => void) => void };
+  let passwordError: { textContent: string };
+  let matchError: { textContent: string };
 
   beforeEach(() => {
     submitHandler = null;
@@ -82,13 +98,25 @@ describe('signup route', () => {
       },
     };
     usernameInput = { value: 'bob' };
-    passwordInput = { value: 'secret123' };
+    passwordInput = {
+      value: 'secret123',
+      addEventListener: () => {},
+    };
+    confirmInput = {
+      value: 'secret123',
+      addEventListener: () => {},
+    };
+    passwordError = { textContent: '' };
+    matchError = { textContent: '' };
 
     (globalThis as any).document = {
       getElementById: (id: string) => {
         if (id === 'signupForm') return form;
         if (id === 'username') return usernameInput;
         if (id === 'password') return passwordInput;
+        if (id === 'password-confirm') return confirmInput;
+        if (id === 'password-error') return passwordError;
+        if (id === 'match-error') return matchError;
         return null;
       },
     };
@@ -110,7 +138,7 @@ describe('signup route', () => {
     signupModule.onLoad?.();
     await submitHandler?.({ preventDefault: () => {} });
 
-    expect(fetchSpy).toHaveBeenCalledWith('/api/signup', jasmine.objectContaining({
+    expect(fetchSpy).toHaveBeenCalledWith('/api/users', jasmine.objectContaining({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
     }));
@@ -130,5 +158,31 @@ describe('signup route', () => {
     await submitHandler?.({ preventDefault: () => {} });
 
     expect((globalThis as any).alert).toHaveBeenCalledWith('Username already exists');
+  });
+
+  it('falls back to a generic message when API error payload has no message', async () => {
+    spyOn(globalThis as any, 'fetch').and.resolveTo({
+      ok: false,
+      json: async () => ({}),
+    } as Response);
+
+    signupModule.onLoad?.();
+    await submitHandler?.({ preventDefault: () => {} });
+
+    expect((globalThis as any).alert).toHaveBeenCalledWith('Signup failed');
+  });
+
+  it('falls back to generic message when error response is not JSON', async () => {
+    spyOn(globalThis as any, 'fetch').and.resolveTo({
+      ok: false,
+      json: async () => {
+        throw new Error('Invalid JSON');
+      },
+    } as Response);
+
+    signupModule.onLoad?.();
+    await submitHandler?.({ preventDefault: () => {} });
+
+    expect((globalThis as any).alert).toHaveBeenCalledWith('Signup failed');
   });
 });
