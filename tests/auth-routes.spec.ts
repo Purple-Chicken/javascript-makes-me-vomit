@@ -178,7 +178,7 @@ describe('signup route', () => {
       json: async () => {
         throw new Error('Invalid JSON');
       },
-    } as Response);
+    } as unknown as Response);
 
     signupModule.onLoad?.();
     await submitHandler?.({ preventDefault: () => {} });
