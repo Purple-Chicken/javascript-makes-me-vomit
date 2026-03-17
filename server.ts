@@ -57,10 +57,18 @@ app.get('/api/users/me', authenticateJWT, (req, res) => {
 
 app.patch('/api/users/me', authenticateJWT, async (req, res) => {
   try {
-    const { password } = req.body;
-    const hashedPassword = await bcrypt.hash(password, 10);
-    await User.findByIdAndUpdate((req.user as any)._id, { password: hashedPassword });
-    res.json({ message: 'Password updated successfully' });
+    const { oldPassword, newPassword } = req.body;
+    const user = req.user as any;
+
+    // Verify old password against stored hash
+    const isMatch = await bcrypt.compare(oldPassword, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ error: 'Incorrect old password' });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await User.findByIdAndUpdate(user._id, { password: hashedPassword });
+res.json({ message: 'Password updated successfully' });
   } catch (err) {
     res.status(500).json({ error: 'Update failed' });
   }

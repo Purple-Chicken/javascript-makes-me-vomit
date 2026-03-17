@@ -14,7 +14,6 @@ You can have people work on a different version of a file, or even roll back to 
 
 - `src`: Source directory for our project 
     - `src/css`: Our CSS files go here 
-    - `src/pages`: The actual different pages of the website
     - `src/routes`: Routing info (update page without <C-r> refresh)
 - `static/`: where we put images 
 - `tests/`: Our Cucumber and Jasmine testing files go here
@@ -24,7 +23,7 @@ You can have people work on a different version of a file, or even roll back to 
 
 ## How do I contribute? 
 
-First, make sure you have the project dependencies installed: `python3`, `git`, `npm`. 
+First, make sure you have the project dependencies installed: `python3`, `git`, `npm`, `docker`, `node`. 
 
 Second, make sure you have the repo locally: 
  ```
@@ -37,6 +36,13 @@ Once you `cd` into the repository, you would need to make the following changes:
 ```docker compose -f backend/docker-compose.yaml up -d```
 - run `npm i` to install/update all the node modules
 - run `npm run dev` to run the development (testing) environment 
+
+Alternatively, you can run this handy dandy one-liner that does it all for you: 
+```
+ git clone https://github.com/Purple-Chicken/javascript-makes-me-vomit.git && cd javascript-makes-me-vomit && cp .env.example .env && docker compose -f backend/docker-compose.yaml up -d && npm i && npm run dev
+
+```
+
 
  ## How do I use Git?
 
