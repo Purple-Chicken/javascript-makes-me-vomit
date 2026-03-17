@@ -4,6 +4,7 @@
     "app.spec.ts",
     "router.spec.ts",
     "auth-routes.spec.ts",
+    "api-account.spec.ts",
     "api-auth.spec.ts",
     "**/*[sS]pec.js"
   ],
