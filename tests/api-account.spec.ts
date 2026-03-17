@@ -1,48 +1,127 @@
-import { createServer, Server } from 'node:http';
-import mongoose from 'mongoose';
-import { User } from '../src/models/User.js';
-import { connectDatabase, createApp } from '../server.js';
+import net from 'node:net';
+import path from 'node:path';
+import { spawn, type ChildProcess } from 'node:child_process';
 
 describe('user account API', () => {
-  const mongoUri =
-    process.env.MONGODB_URI ??
-    'mongodb://admin:admin@127.0.0.1:27017/mydb?authSource=admin';
-  let server: Server;
-  let baseUrl = '';
-  let originalTimeout = 5000;
+  const baseUrl = 'http://127.0.0.1:5000';
+  let apiProcess: ChildProcess | null = null;
+  let startedByTest = false;
+  let originalTimeout = 0;
+
+  const waitFor = (ms: number) =>
+    new Promise((resolve) => {
+      setTimeout(resolve, ms);
+    });
+
+  const isPortOpen = async (host: string, port: number): Promise<boolean> =>
+    await new Promise((resolve) => {
+      const socket = net.createConnection({ host, port }, () => {
+        socket.end();
+        resolve(true);
+      });
+      socket.setTimeout(750, () => {
+        socket.destroy();
+        resolve(false);
+      });
+      socket.on('error', () => resolve(false));
+    });
+
+  const waitForPort = async (host: string, port: number, timeoutMs = 20000) => {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      if (await isPortOpen(host, port)) {
+        return;
+      }
+      await waitFor(250);
+    }
+    throw new Error(`Timeout waiting for ${host}:${port}`);
+  };
+
+  const mergeCookies = (currentJar: string, headers: Headers): string => {
+    const byName = new Map<string, string>();
+    if (currentJar) {
+      for (const cookie of currentJar.split(';').map((part) => part.trim())) {
+        const [name, value] = cookie.split('=');
+        if (name && typeof value !== 'undefined') {
+          byName.set(name, value);
+        }
+      }
+    }
+
+    const headerAny = headers as any;
+    const setCookies: string[] =
+      typeof headerAny.getSetCookie === 'function'
+        ? headerAny.getSetCookie()
+        : headers.get('set-cookie')
+          ? [headers.get('set-cookie') as string]
+          : [];
+
+    for (const setCookie of setCookies) {
+      const [cookiePair] = setCookie.split(';');
+      const [name, value] = cookiePair.split('=');
+      if (name && typeof value !== 'undefined') {
+        byName.set(name.trim(), value.trim());
+      }
+    }
+
+    return Array.from(byName.entries())
+      .map(([name, value]) => `${name}=${value}`)
+      .join('; ');
+  };
+
+  const apiRequest = async (
+    endpoint: string,
+    options: RequestInit = {},
+    cookieJar = '',
+  ): Promise<{ status: number; body: any; cookieJar: string }> => {
+    const headers = new Headers(options.headers);
+    if (cookieJar) {
+      headers.set('cookie', cookieJar);
+    }
+
+    const response = await fetch(`${baseUrl}${endpoint}`, {
+      ...options,
+      headers,
+    });
+    const nextJar = mergeCookies(cookieJar, response.headers);
+    const contentType = response.headers.get('content-type') ?? '';
+    const text = await response.text();
+    const body =
+      contentType.includes('application/json') && text
+        ? JSON.parse(text)
+        : text;
+
+    return { status: response.status, body, cookieJar: nextJar };
+  };
 
   beforeAll(async () => {
     if (typeof jasmine !== 'undefined') {
       originalTimeout = jasmine.DEFAULT_TIMEOUT_INTERVAL;
-      jasmine.DEFAULT_TIMEOUT_INTERVAL = 20000;
+      jasmine.DEFAULT_TIMEOUT_INTERVAL = 60000;
     }
 
-    process.env.MONGODB_URI = mongoUri;
-    if (mongoose.connection.readyState === 0) {
-      await connectDatabase();
+    const alreadyRunning = await isPortOpen('127.0.0.1', 5000);
+    if (!alreadyRunning) {
+      const root = path.resolve('.');
+      apiProcess = spawn(
+        process.execPath,
+        ['--import', 'tsx', path.join(root, 'server.ts')],
+        {
+          cwd: root,
+          stdio: 'ignore',
+          env: { ...process.env },
+        },
+      );
+      startedByTest = true;
     }
 
-    const app = createApp();
-    server = createServer(app);
-    await new Promise<void>((resolve) => {
-      server.listen(0, '127.0.0.1', () => resolve());
-    });
-    const address = server.address();
-    if (!address || typeof address === 'string') {
-      throw new Error('Failed to bind test server');
-    }
-    baseUrl = `http://127.0.0.1:${address.port}`;
+    await waitForPort('127.0.0.1', 5000, 25000);
   });
 
-  afterEach(async () => {
-    await User.deleteMany({ username: /^api_spec_/ });
-  });
-
-  afterAll(async () => {
-    await new Promise<void>((resolve, reject) => {
-      server.close((err) => (err ? reject(err) : resolve()));
-    });
-    await mongoose.disconnect();
+  afterAll(() => {
+    if (startedByTest && apiProcess && !apiProcess.killed) {
+      apiProcess.kill('SIGTERM');
+    }
     if (typeof jasmine !== 'undefined') {
       jasmine.DEFAULT_TIMEOUT_INTERVAL = originalTimeout;
     }
@@ -51,61 +130,102 @@ describe('user account API', () => {
   it('creates a user with POST /api/signup', async () => {
     const username = `api_spec_create_${Date.now()}`;
     const password = 'create-pass-123';
-    const response = await fetch(`${baseUrl}/api/signup`, {
+
+    const signup = await apiRequest('/api/signup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
     });
+    expect(signup.status).toBe(201);
+    expect(signup.body.message).toBe('User created');
 
-    expect(response.status).toBe(201);
-    const data = await response.json();
-    expect(data.message).toBe('User created');
-
-    const savedUser = await User.findOne({ username });
-    expect(savedUser).toBeTruthy();
-    expect(savedUser?.password).not.toBe(password);
+    const login = await apiRequest('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    expect(login.status).toBe(200);
   });
 
-  it('modifies an account with PATCH /api/users/:username', async () => {
+  it('modifies an account password with PATCH /api/change-password', async () => {
     const username = `api_spec_modify_${Date.now()}`;
-    const password = 'old-pass-123';
-    const newUsername = `${username}_updated`;
+    const oldPassword = 'old-pass-123';
     const newPassword = 'new-pass-456';
+    let cookieJar = '';
 
-    await User.create({ username, password });
+    const signup = await apiRequest('/api/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password: oldPassword }),
+    });
+    expect(signup.status).toBe(201);
 
-    const response = await fetch(`${baseUrl}/api/users/${username}`, {
+    const loginOld = await apiRequest('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password: oldPassword }),
+    }, cookieJar);
+    cookieJar = loginOld.cookieJar;
+    expect(loginOld.status).toBe(200);
+
+    const changePassword = await apiRequest('/api/change-password', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: newUsername, password: newPassword }),
+      body: JSON.stringify({ password: newPassword }),
+    }, cookieJar);
+    expect(changePassword.status).toBe(200);
+    expect(changePassword.body.message).toContain('Password updated');
+
+    const logout = await apiRequest('/api/logout', { method: 'POST' }, cookieJar);
+    cookieJar = logout.cookieJar;
+    expect(logout.status).toBe(200);
+
+    const loginWithOld = await apiRequest('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password: oldPassword }),
     });
+    expect(loginWithOld.status).toBe(401);
 
-    expect(response.status).toBe(200);
-    const data = await response.json();
-    expect(data.message).toBe('User updated');
-    expect(data.username).toBe(newUsername);
-
-    const oldUser = await User.findOne({ username });
-    expect(oldUser).toBeNull();
-
-    const updatedUser = await User.findOne({ username: newUsername });
-    expect(updatedUser).toBeTruthy();
-    expect(updatedUser?.password).not.toBe(newPassword);
+    const loginWithNew = await apiRequest('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password: newPassword }),
+    });
+    expect(loginWithNew.status).toBe(200);
   });
 
-  it('deletes an account with DELETE /api/users/:username', async () => {
+  it('deletes an account with DELETE /api/delete-user', async () => {
     const username = `api_spec_delete_${Date.now()}`;
-    await User.create({ username, password: 'delete-pass-123' });
+    const password = 'delete-pass-123';
+    let cookieJar = '';
 
-    const response = await fetch(`${baseUrl}/api/users/${username}`, {
-      method: 'DELETE',
+    const signup = await apiRequest('/api/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
     });
+    expect(signup.status).toBe(201);
 
-    expect(response.status).toBe(200);
-    const data = await response.json();
-    expect(data.message).toBe('User deleted');
+    const login = await apiRequest('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    }, cookieJar);
+    cookieJar = login.cookieJar;
+    expect(login.status).toBe(200);
 
-    const deletedUser = await User.findOne({ username });
-    expect(deletedUser).toBeNull();
+    const deleteUser = await apiRequest('/api/delete-user', {
+      method: 'DELETE',
+    }, cookieJar);
+    expect(deleteUser.status).toBe(200);
+    expect(deleteUser.body.message).toContain('User deleted');
+
+    const loginAfterDelete = await apiRequest('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    expect(loginAfterDelete.status).toBe(401);
   });
 });
