@@ -73,5 +73,23 @@ app.post('/api/logout', (req, res, next) => {
     });
   });
 });
+app.patch('/api/change-password', async (req, res) => {
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  try {
+    const { password } = req.body;
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
+    // Use the user ID from the Passport session to find and update the user
+    await User.findByIdAndUpdate((req.user as any)._id, { password: hashedPassword });
+    
+    res.json({ message: 'Password updated successfully' });
+  } catch (err: any) {
+    console.error('❌ Change Password Error:', err);
+    res.status(500).json({ error: 'Failed to update password' });
+  }
+});
 
 app.listen(5000, () => console.log('Server running on http://localhost:5000'));
