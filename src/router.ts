@@ -1,6 +1,7 @@
 import homeModule from './routes/home.ts';
 import keyboardModule from './routes/keyboard.ts';
 import loginModule from './routes/login.ts';
+import signupModule from './routes/signup.ts';
 import { startMatrixRain } from './matrixRain.ts';
 
 const modules = {
