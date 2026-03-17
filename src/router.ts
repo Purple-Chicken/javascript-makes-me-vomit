@@ -1,10 +1,13 @@
 import homeModule from './routes/home.ts';
 import keyboardModule from './routes/keyboard.ts';
+import loginModule from './routes/login.ts';
 import { startMatrixRain } from './matrixRain.ts';
 
 const modules = {
   '/': homeModule,
   '/keyboard': keyboardModule,
+  '/login': loginModule,
+  '/signup': signupModule,
   '404': { html: '<h1>404</h1><p>Not Found</p>',},
   '500': { html: '<h1>500</h1><p>Internal Server Error</p>' }, 
 };
@@ -42,7 +45,7 @@ export function handleRoute() {
     return;
   }
 
-  await router(app, path, modules);
+  router(app, path, modules);
 
   // Update nav active state
   const navLinks = document.querySelectorAll('nav a');
