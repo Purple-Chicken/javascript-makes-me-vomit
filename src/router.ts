@@ -37,7 +37,18 @@ export function handleRoute() {
   const app = document.getElementById('app');
   const path = location.hash.slice(1) || '/';
 
-  router(app, path, modules);
+  if (!app) {
+    console.error('Route target not found: #app');
+    return;
+  }
+
+  await router(app, path, modules);
+
+  // Update nav active state
+  const navLinks = document.querySelectorAll('nav a');
+  navLinks.forEach(link => link.classList.remove('active'));
+  const activeLink = document.querySelector(`nav a[data-route="${path}"]`);
+  if (activeLink) activeLink.classList.add('active');
 }
 
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
