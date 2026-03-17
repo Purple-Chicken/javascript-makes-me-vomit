@@ -92,4 +92,24 @@ app.patch('/api/change-password', async (req, res) => {
   }
 });
 
+app.delete('/api/delete-user', async (req, res) => {
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  try {
+    const userId = (req.user as any)._id;
+    await User.findByIdAndDelete(userId);
+
+    // After deleting the record, we must invalidate the session
+    req.logout((err) => {
+      if (err) return res.status(500).json({ error: 'Error logging out after deletion' });
+      res.json({ message: 'User deleted and logged out' });
+    });
+  } catch (err: any) {
+    console.error('❌ Delete User Error:', err);
+    res.status(500).json({ error: 'Failed to delete user' });
+  }
+});
+
 app.listen(5000, () => console.log('Server running on http://localhost:5000'));
