@@ -103,3 +103,70 @@ pre {
   text-align: left;
   box-shadow: 0 0 12px rgba(0, 255, 0, 0.15);
 }
+
+/* Form styles */
+.container {
+  max-width: 400px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.input-group {
+  margin-bottom: 15px;
+  text-align: left;
+}
+
+.label {
+  display: block;
+  margin-bottom: 5px;
+  color: rgba(180, 255, 180, 0.95);
+  font-weight: 600;
+}
+
+.input {
+  width: 100%;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(0, 255, 0, 0.6);
+  border-radius: 4px;
+  color: rgba(180, 255, 180, 0.95);
+  font-family: 'Matrix Code NFI', monospace;
+  font-size: 1em;
+  box-sizing: border-box;
+  transition: border-color 0.2s;
+}
+
+.input:focus {
+  outline: none;
+  border-color: rgba(0, 255, 0, 0.9);
+  box-shadow: 0 0 8px rgba(0, 255, 0, 0.3);
+}
+
+.button {
+  background: rgba(0, 0, 0, 0.65);
+  border: 1px solid rgba(0, 255, 0, 0.6);
+  border-radius: 4px;
+  color: rgba(180, 255, 180, 0.95);
+  padding: 12px 24px;
+  font-family: 'Matrix Code NFI', monospace;
+  font-size: 1em;
+  cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s;
+  box-shadow: 0 0 10px rgba(0, 255, 0, 0.15);
+}
+
+.button:hover {
+  background: rgba(0, 0, 0, 0.85);
+  box-shadow: 0 0 15px rgba(0, 255, 0, 0.3);
+}
+
+.button:active {
+  transform: translateY(1px);
+  box-shadow: 0 0 8px rgba(0, 255, 0, 0.2);
+}
+
+.error-message {
+  color: #ff6b6b;
+  font-size: 0.9em;
+  margin-top: 5px;
+}

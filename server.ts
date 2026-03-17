@@ -1,40 +1,26 @@
 import express from 'express';
-import session from 'express-session';
 import passport from 'passport';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
+import jwt from 'jsonwebtoken';
 import { configurePassport } from './src/config/passport';
 import { User } from './src/models/User';
 import bcrypt from 'bcryptjs';
 
 dotenv.config();
 const app = express();
-
-app.use((req, res, next) => {
-  console.log(`${req.method} ${req.url}`);
-  next();
-});
-
-// Connect to MongoDB
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/sha257')
-  .then(() => console.log('✅ MongoDB Connected'))
-  .catch(err => console.error('❌ MongoDB Connection Error:', err));
+const JWT_SECRET = process.env.JWT_SECRET || 'LOL'; 
+const PORT = Number(process.env.PORT || '5000');
+const MONGODB_URI =
+  process.env.MONGODB_URI ||
+  'mongodb://admin:admin@127.0.0.1:27017/mydb?authSource=admin';
 
 // Middleware
 app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
-app.use(session({
-  secret: 'LOL', // Use an env variable in production
-  resave: false,
-  saveUninitialized: false
-}));
-
 configurePassport();
-app.use(passport.initialize());
-app.use(passport.session());
+app.use(passport.initialize()); 
 
-// API Routes
-app.post('/api/signup', async (req, res) => {
+app.post('/api/users', async (req, res) => {
   try {
     const { username, password } = req.body;
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -42,26 +28,55 @@ app.post('/api/signup', async (req, res) => {
     await newUser.save();
     res.status(201).json({ message: "User created" });
   } catch (err: any) {
-    console.error('❌ Signup Error:', err); // This will show in your terminal now
     res.status(500).json({ error: err.message || "Signup failed" });
   }
 });
 
-app.post('/api/login', passport.authenticate('local'), (req, res) => {
-  res.json({ message: "Logged in", user: req.user });
+app.post('/api/sessions', (req, res, next) => {
+  passport.authenticate('local', { session: false }, (err, user, info) => {
+    if (err || !user) {
+      return res.status(400).json({ error: info?.message || 'Login failed' });
+    }
+
+    // Sign the token with the user ID
+    const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: '1d' });
+    res.json({ message: "Logged in", token, user: { username: user.username } });
+  })(req, res, next);
 });
-app.get('/api/me', (req, res) => {
-  if (req.isAuthenticated()) {
-    res.json(req.user);
-  } else {
-    res.status(401).json({ error: 'Not authenticated' });
+
+// Helper for protected routes
+const authenticateJWT = passport.authenticate('jwt', { session: false });
+
+app.get('/api/users/me', authenticateJWT, (req, res) => {
+  res.json(req.user);
+});
+
+app.patch('/api/users/me', authenticateJWT, async (req, res) => {
+  try {
+    const { password } = req.body;
+    const hashedPassword = await bcrypt.hash(password, 10);
+    await User.findByIdAndUpdate((req.user as any)._id, { password: hashedPassword });
+    res.json({ message: 'Password updated successfully' });
+  } catch (err) {
+    res.status(500).json({ error: 'Update failed' });
   }
 });
 
-app.post('/api/logout', (req, res, next) => {
-  req.logout((err) => {
-    if (err) return next(err);
-    res.json({ message: 'Logged out' });
-  });
+app.delete('/api/users/me', authenticateJWT, async (req, res) => {
+  try {
+    await User.findByIdAndDelete((req.user as any)._id);
+    res.json({ message: 'User deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ error: 'Deletion failed' });
+  }
 });
-app.listen(5000, () => console.log('Server running on http://localhost:5000'));
+
+const startServer = async () => {
+  await mongoose.connect(MONGODB_URI);
+  app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+};
+
+startServer().catch((err) => {
+  console.error('Failed to start API server:', err);
+  process.exit(1);
+});

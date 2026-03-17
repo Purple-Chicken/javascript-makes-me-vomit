@@ -6,7 +6,7 @@ import chatModule from './routes/chat.ts';
 import settingsModule from './routes/settings.ts'; // Sidebar
 import historyModule from './routes/history.ts';   // Sidebar
 import accountModule from './routes/account.ts';
-import { startMatrixRain } from './matrixRain.ts';
+import { startMatrixRain } from './lib/matrixRain.ts';
 
 type Module = {
     html: string;
@@ -25,6 +25,8 @@ const modules: Record<string, Module> = {
   '/signup': { ...signupModule, protected: false },
   '/chat': { ...chatModule, protected: true },
   '/account': { ...accountModule, protected: true },
+  '/settings': { ...settingsModule, protected: true },
+  '/history': { ...historyModule, protected: true },
   '404': { html: '<h1>404</h1><p>Not Found</p>', protected: false },
 
 };
@@ -36,7 +38,15 @@ const renderPage = (app: AppLike, html: string) => {
 
 async function checkAuth() {
   try {
-    const res = await fetch('/api/me');
+    const token = localStorage.getItem('token');
+    if (!token) {
+      return false;
+    }
+    const res = await fetch('/api/users/me', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
     return res.ok; // Returns true if 200 OK, false if 401
   } catch {
     return false;

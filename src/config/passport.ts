@@ -1,7 +1,11 @@
 import passport from 'passport';
 import { Strategy as LocalStrategy } from 'passport-local';
+import { Strategy as JwtStrategy, ExtractJwt } from 'passport-jwt';
 import bcrypt from 'bcryptjs';
 import { User } from '../models/User.ts';
+import dotenv from 'dotenv';
+
+dotenv.config(); 
 
 export function configurePassport() {
   passport.use(new LocalStrategy(async (username, password, done) => {
@@ -18,18 +22,21 @@ export function configurePassport() {
     }
   }));
 
-  // Passport needs to know how to store the user in the session cookie
-  passport.serializeUser((user: any, done) => {
-    done(null, user.id);
-  });
+  // 2. JWT Strategy: For protecting subsequent RESTful requests
+  const jwtOptions = {
+    jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+    secretOrKey: process.env.JWT_SECRET || 'your_secret_key' // Use env variable!
+  };
 
-  // And how to look them up when they come back with a cookie
-  passport.deserializeUser(async (id, done) => {
+  passport.use(new JwtStrategy(jwtOptions, async (jwtPayload, done) => {
     try {
-      const user = await User.findById(id);
-      done(null, user);
+      const user = await User.findById(jwtPayload.id);
+      if (user) return done(null, user);
+      return done(null, false);
     } catch (err) {
-      done(err);
+      return done(err, false);
     }
-  });
+  }));
+
+  // Note: serializeUser and deserializeUser are removed as they are for sessions.
 }
