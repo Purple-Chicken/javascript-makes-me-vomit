@@ -117,7 +117,11 @@ describe('puppeteer signup/login flow', () => {
 
     browser = await puppeteer.launch({
       headless: false,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--window-size=1280,720'],
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--start-maximized',
+      ],
       defaultViewport: null,
     });
     page = await browser.newPage();
@@ -150,6 +154,7 @@ describe('puppeteer signup/login flow', () => {
 
     const username = `puppeteer_${Date.now()}`;
     const password = 'test-password-123';
+    const typingDelayMs = 120;
 
     await page.waitForSelector('nav a[href="#/login"]');
     await page.click('nav a[href="#/login"]');
@@ -158,15 +163,29 @@ describe('puppeteer signup/login flow', () => {
       () => document.querySelector('#app h1')?.textContent?.trim() === 'Login',
     );
 
-    await page.click('a[href="#/signup"]');
+    await page.waitForFunction(
+      () =>
+        Array.from(document.querySelectorAll('button')).some(
+          (button) => button.textContent?.trim() === 'Sign Up',
+        ),
+    );
+    await page.evaluate(() => {
+      const signupButton = Array.from(document.querySelectorAll('button')).find(
+        (button) => button.textContent?.trim() === 'Sign Up',
+      );
+      if (!signupButton) {
+        throw new Error('Sign Up button not found on Login page.');
+      }
+      signupButton.click();
+    });
     await pause(750);
     await page.waitForSelector('#signupForm');
 
-    await page.type('#username', username);
+    await page.type('#username', username, { delay: typingDelayMs });
     await pause(500);
-    await page.type('#password', password);
+    await page.type('#password', password, { delay: typingDelayMs });
     await pause(500);
-    await page.type('#password-confirm', password);
+    await page.type('#password-confirm', password, { delay: typingDelayMs });
     await pause(500);
 
     page.once('dialog', async (dialog) => {
@@ -179,9 +198,9 @@ describe('puppeteer signup/login flow', () => {
       () => document.querySelector('#app h1')?.textContent?.trim() === 'Login',
     );
 
-    await page.type('#username', username);
+    await page.type('#username', username, { delay: typingDelayMs });
     await pause(500);
-    await page.type('#password', password);
+    await page.type('#password', password, { delay: typingDelayMs });
     await pause(500);
     await page.click('button[type="submit"]');
     await pause(1000);
