@@ -31,9 +31,10 @@
   "dependencies": {
     "bcryptjs": "^3.0.3",
     "express": "^5.2.1",
-    "express-session": "^1.19.0",
+    "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.3.0",
     "passport": "^0.7.0",
+    "passport-jwt": "^4.0.1",
     "passport-local": "^1.0.0",
     "tslib": "^2.6.2"
   },
@@ -41,21 +42,22 @@
     "@cucumber/cucumber": "^12.7.0",
     "@types/bcryptjs": "^2.4.6",
     "@types/express": "^5.0.6",
-    "@types/express-session": "^1.18.2",
     "@types/jasmine": "^6.0.0",
     "@types/jsdom": "^21.1.7",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20.10.6",
     "@types/passport": "^1.0.17",
+    "@types/passport-jwt": "^4.0.1",
     "@types/passport-local": "^1.0.38",
     "concurrently": "^9.2.1",
     "dotenv": "^17.3.1",
     "eslint": "^10.0.3",
     "jasmine": "^6.1.0",
-    "tsx": "^4.21.0",
-    "typescript": "^5.9.3",
     "jsdom": "^26.1.0",
     "mongodb": "^7.1.0",
     "puppeteer": "^24.15.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
     "vite": "^8.0.0"
   }
 }
