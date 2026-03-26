@@ -8,6 +8,11 @@ import { User } from './src/models/User';
 import bcrypt from 'bcryptjs';
 
 dotenv.config();
+
+const red = '\x1b[91m';
+const green = '\x1b[92m';
+const endc = '\x1b[0m';
+
 const app = express();
 const JWT_SECRET = process.env.JWT_SECRET || 'LOL'; 
 const PORT = Number(process.env.PORT || '5000');
@@ -16,8 +21,8 @@ const MONGODB_URI =
   'mongodb://admin:admin@127.0.0.1:27017/mydb?authSource=admin';
 
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/sha257')
-  .then(() => console.log('✅ MongoDB Connected'))
-  .catch(err => console.error('❌ MongoDB Connection Error:', err));
+  .then(() => console.log(green + 'MongoDB Connected' + endc))
+  .catch(err => console.error(red + 'MongoDB Connection Error:' + endc, err));
 
 // Middleware
 app.use(express.json());
