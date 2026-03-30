@@ -1,0 +1,21 @@
+{
+  "spec_dir": "tests",
+  "spec_files": [
+    "app.spec.ts",
+    "router.spec.ts",
+    "auth-routes.spec.ts",
+    "api-account.spec.ts",
+    "api-auth.spec.ts",
+    "route-modules.spec.ts",
+    "matrix-rain.spec.ts",
+    "home-ui.spec.ts",
+    "login-ui.spec.ts",
+    "signup-ui.spec.ts",
+    "chat-ui.spec.ts",
+    "history-ui.spec.ts",
+    "settings-ui.spec.ts",
+    "account-ui.spec.ts",
+    "**/*[sS]pec.js"
+  ],
+  "helpers": []
+}
