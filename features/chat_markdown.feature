@@ -1,58 +1,34 @@
 Feature: Markdown and Emoji Rendering
-  Scenario: User sends LLM a plaintext prompt
-    Given I am logged in 
-    And I have a previous conversation
-    When I submit an unformatted prompt 
-    Then the message should display 
-  Scenario: User sends LLM a prompt with Markdown headers
-    Given I am logged in 
-    And I have a previous conversation
-    When I submit a prompt with MD style header
-    Then the message should display the headers in a larger font
-  Scenario: User sends LLM a prompt with Markdown bullets or lists
-    Given I am logged in 
-    And I have a previous conversation
-    When I submit a prompt with MD style lists (using - or 1.)
-    Then my message should display bullet points and lists in a markdown format
-  Scenario: User sends LLM a prompt with Markdown links
-    Given I am logged in 
-    And I have a previous conversation
-    When I submit a prompt with MD style links
-    Then my message should contain a visually distinct link 
-    And the link should have the specified text 
-    And the link should go to the specified URL
-  Scenario: User sends LLm a prompt with Markdown style codeblocks
-    Given I am logged in 
-    And I have a previous conversation
-    When I submit a prompt with MD style codeblock (using ``` ```) or verbatim lines (using ` `)
-    Then the message should be displayed with a visually distinct code block section 
-    And the code block font should be monospace 
-  Scenario: LLM sends user a plaintext response
-    Given I am logged in 
-    And I have a previous conversation
-    When the LLM generates a response with MD style links
-    Then the message should display
-  Scenario: LLM sends the user a response with Markdown headers 
-    Given I am logged in 
-    And I have a previous conversation
-    When the LLM generates a response with MD style header 
-    Then the message should display the headers in a larger font
-  Scenario: LLM sends the user a prompt with Markdown bullets or lists
-    Given I am logged in 
-    And I have a previous conversation
-    When the LLM generates a response with MD style lists (using - or 1.)
-    Then the message should display bullet points and lists in a markdown format
-  Scenario: LLM sends the user a prompt with Markdown links
-    Given I am logged in 
-    And I have a previous conversation
-    When the LLM generates a response with MD style links
-    Then the message should contain a visually distinct link 
-    And the link should have the specified text 
-    And the link should go to the specified USL
-  Scenario: LLM sends the user a response with Markdown style codeblocks 
-    Given I am logged in 
-    And I have a previous conversation
-    When the LLM submits a response with MD style codeblock (using ``` ```) or verbatim lines (using ` `)
-    Then the message should be displayed with a visually distinct code block section 
-    And the code block font should be monospace
+  Scenario Outline: Markdown elements render correctly in chat bubbles
+    Given I am in a conversation with an LLM
+    When the <sender> sends a message with <markdown_type>
+    Then the message should be rendered with the correct <html_element>
+    And it should have the <visual_style>
 
+    Examples:
+      | sender    | markdown_type      | html_element | visual_style   |
+      | user      | "### Header"       | "h3"         | "large font"   |
+      | assistant | "- Item 1"         | "li"         | "bullet point" |
+      | assistant | "```js code ```"   | "pre"        | "monospace"    |
+  Scenario: LLM response contains a formatted data table
+    Given I am logged in
+    And I have an active conversation 
+    When the LLM generates a response with a GFM table:
+      """
+      | Model | Speed | Accuracy |
+      |-------|-------|----------|
+      | GPT-4 | Fast  | High     |
+      | Pro   | Med   | Med      |
+      """
+    Then the message should be displayed with a "table" element
+    And the table should have 1 "thead" row and 2 "tbody" rows
+    And the first header cell should contain "Model"
+    And the last body cell should contain "Med"
+  Scenario: LLM response contains a functional hyperlink
+    Given I am logged in 
+    And I have an active conversation
+    When the LLM generates a response with "[Google](https://google.com)" 
+    Then the message should contain a visually distinct link
+    And the link text should be "Google"
+    And the link "href" attribute should be "https://google.com" 
+    And the link should open in a new browser tab
