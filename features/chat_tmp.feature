@@ -1,10 +1,10 @@
 Feature: Temporary Chats 
   Scenario: Authenticated user changes mode to temporary chat 
-    Given I am an authenticated user 
+    Given I am logged in 
     When I select "temporary chat" 
     Then an icon changes indicating the new chat will be a temporary chat 
   Scenario: Authenticated user starts a temporary chat 
-    Given I am an authenticated user 
+    Given I am logged in 
     And I have selected "temporary chat" 
     When I type a string 
     And press "Enter" 
