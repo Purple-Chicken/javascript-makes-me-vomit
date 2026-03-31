@@ -79,7 +79,24 @@ describe('Chat API', () => {
       }),
     }, userToken);
     
+    // 1. Create a new chat with an expiration (e.g., 1 hour from now)
+    const expiryDate = new Date();
+    expiryDate.setHours(expiryDate.getHours() + 1);
+
+    const createRes = await apiRequest('/api/chats', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        modelId: 'gpt-4', 
+        isTemporary: false,
+        systemPrompt: 'You are a helpful assistant.',
+        expiresAt: expiryDate.toISOString()
+      }),
+    }, userToken);
+    
     expect(createRes.status).toBe(201);
+    expect(createRes.body.expiresAt).toBe(expiryDate.toISOString());
+
     const chatId = createRes.body.id;
     expect(chatId).toBeDefined();
 
@@ -146,17 +163,17 @@ describe('Chat API', () => {
     expect(res.status).toBe(401);
   });
 
-  it('enforces temporary chat behavior (not in list)', async () => {
-    const tempChat = await apiRequest('/api/chats', {
-      method: 'POST',
+  it('handles temporary chats as memory-only (no database record)', async () => {
+    // In the new privacy model, the server handles the stream but does not persist a chat object
+    const tempChat = await apiRequest('/api/chats', {      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ modelId: 'gpt-4', isTemporary: true }),
     }, userToken);
     
+    // If the chat is memory-only, the POST might return the stream/success but 
+    // a subsequent GET for that ID should fail as it was never saved to DB.
     const chatId = tempChat.body.id;
-    const list = await apiRequest('/api/chats', { method: 'GET' }, userToken);
-    
-    // Temporary chats should typically not show up in persistent history lists
-    expect(list.body.some((c: any) => c.id === chatId)).toBe(false);
+    const getRes = await apiRequest(`/api/chats/${chatId}`, { method: 'GET' }, userToken);
+    expect(getRes.status).toBe(404);
   });
 });
