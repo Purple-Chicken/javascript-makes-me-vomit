@@ -63,13 +63,13 @@ describe('Chat API', () => {
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
     if (res.body.length > 0) {
-      expect(res.body[0]).toHaveProperty('id');
+      expect(res.body[0].id).toBeDefined();
     }
   });
 
   it('manages the lifecycle of a chat session', async () => {
     // 1. Create a new chat
-    const createRes = await apiRequest('/api/chats', {
+    let createRes = await apiRequest('/api/chats', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
@@ -83,7 +83,7 @@ describe('Chat API', () => {
     const expiryDate = new Date();
     expiryDate.setHours(expiryDate.getHours() + 1);
 
-    const createRes = await apiRequest('/api/chats', {
+    createRes = await apiRequest('/api/chats', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
