@@ -11,17 +11,15 @@ Feature: Temporary Chats
     Then my message should be sent 
     And I should receive a response 
     And the chat should be a temporary chat 
-  Scenario: Authenticated user returns to a temporary chat in the same session 
-    Given I am an authenticated user 
-    And I have a temporary chat in my current session 
-    When I navigate to a different chat 
-    And I navigate back to the temporary chat 
-    Then the temporary chat history should be preserved 
-  Scenario: Authenticated user returns to a temporary chat in a different session 
-    Given I am an authenticated user 
-    And I have a temporary chat in my current session 
-    When I sign out / log off my current session 
-    And I login to a new session under the same user 
-    Then the temporary chat should not be visible
-    And the temporary chat is not stored on the server 
-
+  Scenario: Temporary chat is destroyed upon navigation
+    Given I am in an active "Temporary Chat" session
+    And I have received 2 messages from the LLM
+    When I navigate to a different chat or page
+    And I navigate back to the "New Chat" page
+    Then the previous temporary messages should be gone
+    And the chat interface should be reset to empty
+  Scenario: Temporary chat is destroyed upon page refresh
+    Given I am in an active "Temporary Chat" session
+    When I refresh the browser tab
+    Then the app should load the default "New Chat" state
+    And no trace of the temporary session should remain in memory

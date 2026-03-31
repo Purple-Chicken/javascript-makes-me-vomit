@@ -16,3 +16,8 @@ Feature: Delete Chat
     And the chat is owned by my current user 
     Then I should see a visual change 
     And the full chat history is deleted
+  Scenario: Successful deletion of a specific message branch
+    Given I am an authenticated user
+    When I delete a specific message within a chat
+    Then that message and all its subsequent replies (children) are removed
+    And the rest of the chat history is preserved
