@@ -1,6 +1,6 @@
 Feature: Chat History Sidebar
   Scenario: Authenticated user views their conversation list
-    Given I am an authenticated user
+    Given I am logged in
     And I have 3 existing persistent conversations
     And I have 1 temporary conversation
     When I open the "History" sidebar

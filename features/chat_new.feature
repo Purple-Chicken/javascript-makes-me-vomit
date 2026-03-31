@@ -1,6 +1,6 @@
 Feature: Create new chats 
   Scenario: Authenticated user creates first chat 
-    Given I am an authenticated user 
+    Given I am logged in 
     And I have no previous chats 
     When I type a string 
     And press "Enter" 
@@ -10,18 +10,18 @@ Feature: Create new chats
     And a new chat session is created 
     And the server returns the LLM response 
   Scenario: Authenticated user creates new chat from a different page
-    Given I am an authenticated user 
+    Given I am logged in 
     And I am currently not on the 'new chat' page 
     When I select "new chat" 
     Then I am redirected to the "new chat" page 
     And I am able to create a new chat 
   Scenario: User authenticates and creates a new chat 
-    Given I am an unauthenticated user
+    Given I am not logged in
     And I have an account
     When I sign in to my account 
     Then I should be redirected to the "new chat" version of the chat page
   Scenario: New chat is added to history immediately
-    Given I am an authenticated user
+    Given I am logged in
     When I start a new non-temporary chat
     Then the chat should immediately appear at the top of my history sidebar
     And it should be marked as the "active" conversation
