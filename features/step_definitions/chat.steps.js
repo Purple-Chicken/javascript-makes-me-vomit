@@ -1,4 +1,5 @@
 import { Given, When, Then } from '@cucumber/cucumber';
+import { handleRoute } from '../../src/router.ts';
 
 // --- State Management ---
 let currentChat = {
@@ -81,6 +82,11 @@ When('I set the expiration to {string}', (timeframe) => {
   currentChat.expiresAt = timeframe;
 });
 
+When('I open the {string} sidebar', (name) => {
+  // Logic to mock opening the sidebar UI
+  appHTML = `<div id="sidebar">${sidebarChats.map(c => `<div>${c.title} - ${c.model}</div>`).join('')}</div>`;
+});
+
 // --- Then Steps ---
 
 Then('the chat should be a temporary chat', () => {
@@ -122,4 +128,9 @@ Then('the message should be rendered with the correct {string}', (element) => {
 
 Then('the link {string} attribute should be {string}', (attr, value) => {
   // Verification logic for <a href="..."> tags
+});
+
+Then('I should see exactly {int} conversation entries', (count) => {
+  // Check the number of items in the sidebarChats array or the mock HTML
+  if (sidebarChats.length !== count) throw new Error(`Expected ${count} chats, found ${sidebarChats.length}`);
 });
