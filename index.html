@@ -12,11 +12,24 @@
   <body>
     <canvas id="matrix-canvas"></canvas>
     <div id="matrix-overlay"></div>
+    <div id="topbar">
+      <div id="topbar-auth">
+        <a href="#/login" id="topbar-login" class="topbar-btn">Login</a>
+        <a href="#/signup" id="topbar-signup" class="topbar-btn">Sign Up</a>
+      </div>
+      <a href="#/account" id="topbar-profile" class="profile-icon" title="Account">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24">
+          <circle cx="12" cy="8" r="4"/>
+          <path d="M4 20c0-4 4-7 8-7s8 3 8 7"/>
+        </svg>
+      </a>
+    </div>
     <nav>
       <a href="#/" data-route="/">Home</a>
-      <a href="#/login" data-route="/login">Login</a>
-      <a href="#/chat" data-route="/chat">Chat</a>
-      <a href="#/account" data-route="/account">Account</a>
+      <a href="#/chat" data-route="/chat" id="nav-chat">Chat</a>
+      <a href="#/chat" id="nav-new-chat" style="display:none;">+ New Chat</a>
+      <div id="sidebar-chats"></div>
+      <a href="#/history" data-route="/history">History</a>
     </nav>
     <div id="app"></div>
     
