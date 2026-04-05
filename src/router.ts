@@ -157,6 +157,9 @@ export async function handleRoute() {
     if (topbarProfile) topbarProfile.style.display = 'none';
   }
 
+  // Track current route on body for CSS targeting (e.g. light-mode backdrop)
+  document.body.dataset.route = path;
+
   // Update nav active state
   const navLinks = document.querySelectorAll('nav a');
   navLinks.forEach(link => link.classList.remove('active'));
@@ -229,7 +232,7 @@ window.addEventListener('sidebar:refresh', (e: Event) => {
 
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
   // Global theme applicator — called from account page and on load
-  (window as any).__applyTheme = (prefs: { matrixRain?: boolean; lightMode?: boolean; font?: string; themeColor?: string }) => {
+  (window as any).__applyTheme = (prefs: { matrixRain?: boolean; lightMode?: boolean; hearye?: boolean; font?: string; themeColor?: string }) => {
     const body = document.body;
     const canvas = document.getElementById('matrix-canvas') as HTMLCanvasElement | null;
 
@@ -241,6 +244,7 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
 
     // Light mode
     body.classList.toggle('light-mode', prefs.lightMode === true);
+    body.classList.toggle('hearye-mode', prefs.hearye === true);
 
     // Font
     body.classList.remove('font-sans', 'font-serif', 'font-mono');
@@ -254,7 +258,7 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       body.classList.add(`theme-${prefs.themeColor}`);
     }
     setMatrixColor(prefs.themeColor || 'green');
-    setMatrixLightMode(prefs.lightMode === true);
+    setMatrixLightMode(prefs.hearye === true);
   };
 
   // Apply saved preferences immediately

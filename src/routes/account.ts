@@ -62,7 +62,7 @@ const html=`
     <h2 class="text-center">Appearance</h2>
 
     <div class="setting-row">
-      <label class="label">Matrix Rain Background</label>
+      <label class="label" data-dark-label="Matrix Rain Background" data-light-label="Typewriter Background">Matrix Rain Background</label>
       <label class="toggle-switch">
         <input type="checkbox" id="pref-matrix-rain" checked>
         <span class="toggle-slider"></span>
@@ -77,24 +77,32 @@ const html=`
       </label>
     </div>
 
+    <div class="setting-row">
+      <label class="label" data-dark-label="Hear-ye Hear-ye" data-light-label="Hear-ye Hear-ye">Hear-ye Hear-ye</label>
+      <label class="toggle-switch">
+        <input type="checkbox" id="pref-hearye">
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+
     <div class="setting-row" style="flex-direction: column; align-items: flex-start; gap: 8px;">
       <label class="label">Font</label>
       <div id="font-sampler" class="font-sampler-grid">
         <button class="font-option" data-font="ibm-plex" type="button">
           <span class="font-preview" style="font-family: 'IBM Plex Mono', monospace;">SHA-257</span>
-          <span class="font-label">Terminal</span>
+          <span class="font-label" data-dark-label="Terminal" data-light-label="Typewriter">Terminal</span>
         </button>
         <button class="font-option" data-font="sans" type="button">
           <span class="font-preview" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">SHA-257</span>
-          <span class="font-label">System Sans</span>
+          <span class="font-label" data-dark-label="System Sans" data-light-label="Modernist">System Sans</span>
         </button>
         <button class="font-option" data-font="serif" type="button">
           <span class="font-preview" style="font-family: Georgia, 'Times New Roman', serif;">SHA-257</span>
-          <span class="font-label">Serif</span>
+          <span class="font-label" data-dark-label="Serif" data-light-label="Old Style">Serif</span>
         </button>
         <button class="font-option" data-font="mono" type="button">
           <span class="font-preview" style="font-family: 'Courier New', Courier, monospace;">SHA-257</span>
-          <span class="font-label">Monospace</span>
+          <span class="font-label" data-dark-label="Monospace" data-light-label="Manuscript">Monospace</span>
         </button>
       </div>
     </div>
@@ -167,6 +175,7 @@ const onLoad = () => {
     const saveAppearanceBtn = document.getElementById('save-appearance-btn');
     const matrixRainCheckbox = document.getElementById('pref-matrix-rain') as HTMLInputElement;
     const lightModeCheckbox = document.getElementById('pref-light-mode') as HTMLInputElement;
+    const hearyeCheckbox = document.getElementById('pref-hearye') as HTMLInputElement;
 
     let selectedPic = 0;
     let selectedColor = 'green';
@@ -178,6 +187,13 @@ const onLoad = () => {
         selectedFont = normalized;
         document.querySelectorAll('.font-option').forEach(btn => {
             btn.classList.toggle('selected', (btn as HTMLElement).dataset.font === normalized);
+        });
+    }
+
+    function updateFontLabels() {
+        const isHearye = document.body.classList.contains('hearye-mode');
+        document.querySelectorAll<HTMLElement>('[data-dark-label]').forEach(el => {
+            el.textContent = isHearye ? (el.dataset.lightLabel ?? '') : (el.dataset.darkLabel ?? '');
         });
     }
 
@@ -197,7 +213,9 @@ const onLoad = () => {
             const prefs = user.preferences || {};
             if (matrixRainCheckbox) matrixRainCheckbox.checked = prefs.matrixRain !== false;
             if (lightModeCheckbox) lightModeCheckbox.checked = prefs.lightMode === true;
+            if (hearyeCheckbox) hearyeCheckbox.checked = !!prefs.hearye;
             updateFontSelection(prefs.font || 'ibm-plex');
+            updateFontLabels();
             selectedColor = prefs.themeColor || 'green';
             updateColorSelection(selectedColor);
         }
@@ -248,16 +266,19 @@ const onLoad = () => {
         const prefs = {
             matrixRain: matrixRainCheckbox?.checked ?? true,
             lightMode: lightModeCheckbox?.checked ?? false,
+            hearye: hearyeCheckbox?.checked ?? false,
             font: selectedFont,
             themeColor: selectedColor,
         };
         applyTheme(prefs);
+        updateFontLabels();
         await fetch('/api/users/me', { method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ preferences: prefs }) });
     }
 
     // Instant-apply listeners for appearance controls
     matrixRainCheckbox?.addEventListener('change', () => saveAndApplyAppearance());
     lightModeCheckbox?.addEventListener('change', () => saveAndApplyAppearance());
+    hearyeCheckbox?.addEventListener('change', () => saveAndApplyAppearance());
 
     // Username update
     usernameForm?.addEventListener('submit', async (e) => {
@@ -344,7 +365,7 @@ const onLoad = () => {
     });
 };
 
-function applyTheme(prefs: { matrixRain?: boolean; lightMode?: boolean; font?: string; themeColor?: string }) {
+function applyTheme(prefs: { matrixRain?: boolean; lightMode?: boolean; hearye?: boolean; font?: string; themeColor?: string }) {
     localStorage.setItem('userPreferences', JSON.stringify(prefs));
     (window as any).__applyTheme?.(prefs);
 }
