@@ -45,7 +45,7 @@ app.post('/api/users', async (req, res) => {
 });
 
 app.post('/api/sessions', (req, res, next) => {
-  passport.authenticate('local', { session: false }, (err, user, info) => {
+  passport.authenticate('local', { session: false }, (err: Error | null, user: InstanceType<typeof User> | false, info: { message: string }) => {
     if (err || !user) {
       return res.status(400).json({ error: info?.message || 'Login failed' });
     }
@@ -176,7 +176,7 @@ app.post('/api/chat', authenticateJWT, async (req, res) => {
       { role: 'user', content: message },
     ];
 
-    const reply = await queryOllama(ollamaMessages);
+    const reply = (await queryOllama(ollamaMessages)).replace(/<think>[\s\S]*?<\/think>/g, '').trim();
 
     conversation.messages.push({ role: 'user', content: message });
     conversation.messages.push({ role: 'assistant', content: reply });
