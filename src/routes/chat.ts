@@ -5,12 +5,11 @@ const html = `
       <h1 style="margin: 0; font-size: 1.5em;">Chat</h1>
     </div>
     <div id="chat-messages">
-      <p class="start-hint">Start a conversation...</p>
     </div>
     <form id="chatForm" class="chat-input-bar">
       <div class="chat-input-wrap">
-        <div class="input-prompt" style="flex: 1;"><input type="text" id="chat-input" class="input" placeholder="ask something..." autocomplete="off"></div>
-        <button class="send-btn-inner" type="submit" id="send-btn" title="Send">
+        <div class="input-prompt" style="flex: 1;"><textarea id="chat-input" class="input chat-textarea" placeholder="&lt;prompt here&gt;" autocomplete="off" rows="1"></textarea></div>
+        <button class="send-btn-inner" type="submit" id="send-btn" title="Send" style="display:none;">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
         </button>
         <button class="stop-btn" type="button" id="stop-btn" style="display:none;" title="Stop">
@@ -30,7 +29,7 @@ function escapeHtml(s: string) {
 
 const onLoad = () => {
   const form = document.getElementById('chatForm') as HTMLFormElement;
-  const input = document.getElementById('chat-input') as HTMLInputElement;
+  const input = document.getElementById('chat-input') as HTMLTextAreaElement;
   const messages = document.getElementById('chat-messages') as HTMLDivElement;
   const sendBtn = document.getElementById('send-btn') as HTMLButtonElement;
   const stopBtn = document.getElementById('stop-btn') as HTMLButtonElement;
@@ -55,7 +54,10 @@ const onLoad = () => {
             const cls = m.role === 'user' ? 'user' : 'llm';
             const label = m.role === 'user' ? 'You' : 'LLM';
             const copy = copyBtn;
-            return `<div class="chat-message ${cls}">${copy}<div class="chat-bubble ${cls}"><div class="bubble-role">${label}</div><p>${escapeHtml(m.content)}</p></div></div>`;
+            const bubbleContent = m.role === 'user'
+              ? `<div class="chat-bubble ${cls}">${copy}<div class="bubble-role">${label}</div><p>${escapeHtml(m.content)}</p></div>`
+              : `${copy}<div class="chat-bubble ${cls}"><div class="bubble-role">${label}</div><p>${escapeHtml(m.content)}</p></div>`;
+            return `<div class="chat-message ${cls}">${bubbleContent}</div>`;
           }).join('');
           messages.scrollTo(0, messages.scrollHeight);
         }
@@ -64,6 +66,97 @@ const onLoad = () => {
       window.dispatchEvent(new CustomEvent('sidebar:refresh', { detail: { activeId: activeConversationId } }));
     })();
   }
+
+  // Auto-resize textarea and show/hide send button
+  const resizeInput = () => {
+    input.style.height = 'auto';
+    input.style.height = input.scrollHeight + 'px';
+    sendBtn.style.display = (!isGenerating && input.value.trim()) ? '' : 'none';
+
+    const parent = input.parentElement as HTMLElement | null;
+    if (!parent) return;
+
+    const hasValue = input.value.length > 0;
+
+    // Remove previous markers
+    parent.querySelectorAll('.line-marker').forEach(el => el.remove());
+
+    if (!hasValue) return;
+
+    const cs = getComputedStyle(input);
+    const lineH = parseFloat(cs.lineHeight);
+    const padTop = parseFloat(cs.paddingTop);
+
+    const addMarker = (baseTop: number) => {
+      const m = document.createElement('span');
+      m.className = 'line-marker';
+      m.textContent = '>';
+      m.dataset.baseTop = String(baseTop);
+      m.style.top = (baseTop - input.scrollTop) + 'px';
+      parent.appendChild(m);
+    };
+
+    // Always place a marker for line 1
+    addMarker(padTop);
+
+    const lines = input.value.split('\n');
+    if (lines.length <= 1) return;
+
+    // Clone sized to the textarea's text content width (no padding) so
+    // scrollHeight / lineH gives exact visual row count per logical line.
+    const contentWidth = input.getBoundingClientRect().width
+      - parseFloat(cs.paddingLeft)
+      - parseFloat(cs.paddingRight);
+
+    const clone = document.createElement('textarea');
+    clone.setAttribute('rows', '1');
+    clone.style.cssText =
+      `position:fixed;top:-9999px;left:-9999px;visibility:hidden;pointer-events:none;` +
+      `width:${contentWidth}px;padding:0;border:0;margin:0;` +
+      `box-sizing:content-box;height:auto;overflow:hidden;resize:none;` +
+      `font:${cs.font};line-height:${cs.lineHeight};` +
+      `letter-spacing:${cs.letterSpacing};word-spacing:${cs.wordSpacing};` +
+      `white-space:pre-wrap;word-break:break-word;`;
+    document.body.appendChild(clone);
+
+    let prefix = '';
+    for (let i = 0; i < lines.length - 1; i++) {
+      if (i > 0) prefix += '\n';
+      prefix += lines[i];
+      clone.value = prefix;
+      const cumRows = Math.max(i + 1, Math.round(clone.scrollHeight / lineH));
+
+      addMarker(padTop + cumRows * lineH);
+    }
+
+    document.body.removeChild(clone);
+  };
+
+  const syncMarkers = () => {
+    const parent = input.parentElement;
+    if (!parent) return;
+    const scrollTop = input.scrollTop;
+    parent.querySelectorAll<HTMLElement>('.line-marker').forEach(m => {
+      m.style.top = (parseFloat(m.dataset.baseTop || '0') - scrollTop) + 'px';
+    });
+  };
+
+  input?.addEventListener('input', resizeInput);
+  input?.addEventListener('scroll', syncMarkers);
+
+  // Enter submits; Shift+Enter inserts newline with "> " prefix
+  input?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      form?.requestSubmit();
+    } else if (e.key === 'Enter' && e.shiftKey) {
+      e.preventDefault();
+      const pos = input.selectionStart ?? input.value.length;
+      input.value = input.value.slice(0, pos) + '\n' + input.value.slice(pos);
+      input.selectionStart = input.selectionEnd = pos + 1;
+      resizeInput();
+    }
+  });
 
   form?.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -89,9 +182,11 @@ const onLoad = () => {
     // Append user bubble
     const userMessage = document.createElement('div');
     userMessage.className = 'chat-message user';
-    userMessage.innerHTML = `<button class="bubble-copy-btn" title="Copy">${copyBtnSvg}</button><div class="chat-bubble user"><div class="bubble-role">You</div><p>${escapeHtml(text)}</p></div>`;
+    userMessage.innerHTML = `<div class="chat-bubble user"><button class="bubble-copy-btn" title="Copy">${copyBtnSvg}</button><div class="bubble-role">You</div><p>${escapeHtml(text)}</p></div>`;
     messages?.appendChild(userMessage);
     input.value = '';
+    input.style.height = 'auto';
+    sendBtn.style.display = 'none';
     messages?.scrollTo(0, messages.scrollHeight);
 
     // Create LLM bubble with spinner

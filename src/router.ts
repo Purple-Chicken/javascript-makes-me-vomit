@@ -6,7 +6,7 @@ import chatModule from './routes/chat.ts';
 import settingsModule from './routes/settings.ts'; // Sidebar
 import historyModule from './routes/history.ts';   // Sidebar
 import accountModule from './routes/account.ts';
-import { startMatrixRain, setMatrixColor, setMatrixLightMode } from './lib/matrixRain.ts';
+import { startMatrixRain, setMatrixColor } from './lib/matrixRain.ts';
 
 type Module = {
     html: string;
@@ -131,7 +131,7 @@ export async function handleRoute() {
     }
 
     // Load and apply user preferences if not cached yet
-    if (!localStorage.getItem('userPreferences')) {
+    if (!localStorage.getItem('userPreferences') || !localStorage.getItem('cachedUsername')) {
       try {
         const prefRes = await fetch('/api/users/me', {
           headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
@@ -148,6 +148,10 @@ export async function handleRoute() {
             if (topbarProfile && TOPBAR_ICONS[user.profilePic]) {
               topbarProfile.innerHTML = TOPBAR_ICONS[user.profilePic];
             }
+          }
+          // Cache username
+          if (user.username) {
+            localStorage.setItem('cachedUsername', user.username);
           }
         }
       } catch {}
@@ -214,12 +218,6 @@ async function loadSidebarChats(activeId?: string) {
         ).join('')
       : '';
 
-    // Only apply fade mask when text actually overflows
-    requestAnimationFrame(() => {
-      container.querySelectorAll('.sidebar-chat-text').forEach(el => {
-        if (el.scrollWidth > el.clientWidth) el.classList.add('overflows');
-      });
-    });
   } catch {
     container.innerHTML = '';
   }
@@ -232,7 +230,7 @@ window.addEventListener('sidebar:refresh', (e: Event) => {
 
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
   // Global theme applicator — called from account page and on load
-  (window as any).__applyTheme = (prefs: { matrixRain?: boolean; lightMode?: boolean; hearye?: boolean; font?: string; themeColor?: string }) => {
+  (window as any).__applyTheme = (prefs: { matrixRain?: boolean; lightMode?: boolean; font?: string; themeColor?: string }) => {
     const body = document.body;
     const canvas = document.getElementById('matrix-canvas') as HTMLCanvasElement | null;
 
@@ -244,7 +242,6 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
 
     // Light mode
     body.classList.toggle('light-mode', prefs.lightMode === true);
-    body.classList.toggle('hearye-mode', prefs.hearye === true);
 
     // Font
     body.classList.remove('font-sans', 'font-serif', 'font-mono');
@@ -258,7 +255,6 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       body.classList.add(`theme-${prefs.themeColor}`);
     }
     setMatrixColor(prefs.themeColor || 'green');
-    setMatrixLightMode(prefs.hearye === true);
   };
 
   // Apply saved preferences immediately
@@ -275,6 +271,49 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
   if (sp) { try { (window as any).__applyTheme(JSON.parse(sp)); } catch {} }
 
   handleRoute();
+
+  // Profile dropdown
+  (() => {
+    const btn = document.getElementById('topbar-profile');
+    const dropdown = document.getElementById('profile-dropdown') as HTMLElement | null;
+    const usernameEl = document.getElementById('profile-dropdown-username');
+    const logoutBtn = document.getElementById('profile-dropdown-logout');
+    const settingsLink = document.getElementById('profile-dropdown-settings');
+
+    if (!btn || !dropdown) return;
+
+    const updateUsername = () => {
+      const u = localStorage.getItem('cachedUsername');
+      if (usernameEl) usernameEl.textContent = u || '—';
+    };
+    updateUsername();
+
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      updateUsername();
+      dropdown.style.display = dropdown.style.display === 'none' ? '' : 'none';
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!(e.target as HTMLElement).closest('#profile-dropdown-wrap')) {
+        dropdown.style.display = 'none';
+      }
+    });
+
+    logoutBtn?.addEventListener('click', () => {
+      dropdown.style.display = 'none';
+      localStorage.removeItem('token');
+      localStorage.removeItem('userPreferences');
+      localStorage.removeItem('userProfilePic');
+      localStorage.removeItem('cachedUsername');
+      window.location.hash = '#/login';
+      handleRoute();
+    });
+
+    settingsLink?.addEventListener('click', () => {
+      dropdown.style.display = 'none';
+    });
+  })();
 
   // New Chat nav button: force a fresh chat even if already on /chat
   const navNewChat = document.getElementById('nav-new-chat');
