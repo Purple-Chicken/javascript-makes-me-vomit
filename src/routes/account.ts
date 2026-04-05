@@ -1,154 +1,334 @@
 // src/routes/account.ts
+const PROFILE_PICS = [
+  // 0: default person
+  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="60" height="60"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-7 8-7s8 3 8 7"/></svg>`,
+  // 1: robot
+  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="60" height="60"><rect x="5" y="7" width="14" height="12" rx="2"/><circle cx="9" cy="13" r="1.5"/><circle cx="15" cy="13" r="1.5"/><path d="M9 17h6"/><line x1="12" y1="3" x2="12" y2="7"/><circle cx="12" cy="2" r="1"/></svg>`,
+  // 2: cat
+  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="60" height="60"><path d="M4 10l2-6 4 3h4l4-3 2 6"/><ellipse cx="12" cy="15" rx="7" ry="5"/><circle cx="10" cy="14" r="1"/><circle cx="14" cy="14" r="1"/><path d="M11 16.5l1 0.5 1-0.5"/></svg>`,
+];
+
+// Small versions for topbar icon
+const PROFILE_PICS_SMALL = [
+  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-7 8-7s8 3 8 7"/></svg>`,
+  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24"><rect x="5" y="7" width="14" height="12" rx="2"/><circle cx="9" cy="13" r="1.5"/><circle cx="15" cy="13" r="1.5"/><path d="M9 17h6"/><line x1="12" y1="3" x2="12" y2="7"/><circle cx="12" cy="2" r="1"/></svg>`,
+  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24"><path d="M4 10l2-6 4 3h4l4-3 2 6"/><ellipse cx="12" cy="15" rx="7" ry="5"/><circle cx="10" cy="14" r="1"/><circle cx="14" cy="14" r="1"/><path d="M11 16.5l1 0.5 1-0.5"/></svg>`,
+];
+
 const html=`
 <h1>Account Settings</h1>
-    <div class="box-container">
-        <h2 id="welcome-header" class="text-center">Account</h2>
-        <br>
-        <form id="changepwdForm" class="changepwdForm">
-            <div class="input-group">
-                <label for="old-password" class="label">Old Password</label>
-                <input type="password" id="old-password" class="input" required>
-                <span id="old-error" class="error-message"></span>
-            </div>
-            <br>
-            <div class="input-group">
-                <label for="password" class="label">New Password</label>
-                <input type="password" id="password" class="input">
-                <span id="password-error" class="error-message"></span>
-            </div>
-            <br>
-            <div class="input-group">
-                <label for="password-confirm" class="label">Confirm Password</label>
-                <input type="password" id="password-confirm" class="input">
-                <span id="match-error" class="error-message"></span>
-            </div>
-            <br>
-            <button class="button" type="submit">Update Password</button>
-        </form>
-        <br> 
-        <div class="danger-zone" style="border-top: 1px solid #444; margin-top: 20px; padding-top: 20px;">
-            <button id="delete-btn" class="button button-danger" style="background-color: #ff4444;">Delete My Account</button>
-        </div>
+<div class="account-page">
+
+  <!-- PROFILE SECTION -->
+  <div class="box-container" style="margin-bottom: 20px;">
+    <h2 class="text-center">Profile</h2>
+
+    <div class="input-group">
+      <label class="label">Profile Picture</label>
+      <div id="profile-pic-chooser" class="profile-pic-row">
+        ${PROFILE_PICS.map((svg, i) => `<button class="profile-pic-option" data-pic="${i}" type="button">${svg}</button>`).join('')}
+      </div>
     </div>
+
+    <form id="changeUsernameForm">
+      <div class="input-group">
+        <label for="new-username" class="label">Username</label>
+        <input type="text" id="new-username" class="input" autocomplete="off">
+        <span id="username-error" class="error-message"></span>
+      </div>
+      <button class="button" type="submit">Update Username</button>
+    </form>
+
+    <br>
+
+    <form id="changepwdForm">
+      <div class="input-group">
+        <label for="old-password" class="label">Old Password</label>
+        <input type="password" id="old-password" class="input" required>
+        <span id="old-error" class="error-message"></span>
+      </div>
+      <div class="input-group">
+        <label for="password" class="label">New Password</label>
+        <input type="password" id="password" class="input">
+        <span id="password-error" class="error-message"></span>
+      </div>
+      <div class="input-group">
+        <label for="password-confirm" class="label">Confirm Password</label>
+        <input type="password" id="password-confirm" class="input">
+        <span id="match-error" class="error-message"></span>
+      </div>
+      <button class="button" type="submit">Update Password</button>
+    </form>
+  </div>
+
+  <!-- APPEARANCE SECTION -->
+  <div class="box-container" style="margin-bottom: 20px;">
+    <h2 class="text-center">Appearance</h2>
+
+    <div class="setting-row">
+      <label class="label">Matrix Rain Background</label>
+      <label class="toggle-switch">
+        <input type="checkbox" id="pref-matrix-rain" checked>
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+
+    <div class="setting-row">
+      <label class="label">Light Mode</label>
+      <label class="toggle-switch">
+        <input type="checkbox" id="pref-light-mode">
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+
+    <div class="setting-row">
+      <label class="label">Font</label>
+      <select id="pref-font" class="input" style="width: auto; min-width: 160px;">
+        <option value="neo-tech">Neo Tech (default)</option>
+        <option value="sans">Sans-serif</option>
+        <option value="serif">Serif</option>
+      </select>
+    </div>
+
+    <div class="setting-row">
+      <label class="label">Theme Color</label>
+      <div id="theme-color-chooser" class="theme-color-row">
+        <button class="theme-swatch" data-color="green" style="background: #00ff00;" type="button"></button>
+        <button class="theme-swatch" data-color="blue" style="background: #4488ff;" type="button"></button>
+        <button class="theme-swatch" data-color="purple" style="background: #bb66ff;" type="button"></button>
+        <button class="theme-swatch" data-color="amber" style="background: #ffaa00;" type="button"></button>
+      </div>
+    </div>
+
+    <button id="save-appearance-btn" class="button" style="margin-top: 12px; display: none;">Save Appearance</button>
+  </div>
+
+  <!-- DANGER ZONE -->
+  <div class="box-container">
+    <div style="display: flex; gap: 12px; justify-content: center;">
+      <button id="logout-btn" class="button">Logout</button>
+      <button id="delete-btn" class="button button-danger" style="background-color: #ff4444;">Delete My Account</button>
+    </div>
+  </div>
+</div>
+
+<!-- Account deletion confirmation dialog -->
+<div id="delete-account-dialog" style="
+  display: none; position: fixed; inset: 0; z-index: 100;
+  background: rgba(0,0,0,0.7); align-items: center; justify-content: center;
+">
+  <div class="box-container" style="max-width: 440px;">
+    <h2>Delete Account</h2>
+    <p style="color: #ff6b6b; font-weight: 600;">Warning: This action is irreversible. All data will be permanently lost.</p>
+    <form id="confirmDeleteForm">
+      <div class="input-group">
+        <label for="delete-username" class="label">Username</label>
+        <input type="text" id="delete-username" class="input" required>
+      </div>
+      <br>
+      <div class="input-group">
+        <label for="delete-password" class="label">Password</label>
+        <input type="password" id="delete-password" class="input" required>
+      </div>
+      <span id="delete-error" class="error-message"></span>
+      <br>
+      <div style="display: flex; gap: 12px; justify-content: center;">
+        <button type="submit" class="button button-danger" style="background-color: #ff4444;">Yes</button>
+        <button type="button" id="cancel-delete-account" class="button">No</button>
+      </div>
+    </form>
+  </div>
+</div>
 `; 
 const onLoad = () => {
-    const form = document.getElementById('changepwdForm') as HTMLFormElement;
+    const pwdForm = document.getElementById('changepwdForm') as HTMLFormElement;
+    const usernameForm = document.getElementById('changeUsernameForm') as HTMLFormElement;
     const oldPasswordInput = document.getElementById('old-password') as HTMLInputElement;
     const passwordInput = document.getElementById('password') as HTMLInputElement;
     const confirmInput = document.getElementById('password-confirm') as HTMLInputElement;
     const oldError = document.getElementById('old-error');
     const passwordError = document.getElementById('password-error');
     const matchError = document.getElementById('match-error');
-    const header = document.getElementById('welcome-header');
+    const usernameInput = document.getElementById('new-username') as HTMLInputElement;
+    const usernameError = document.getElementById('username-error');
     const deleteBtn = document.getElementById('delete-btn');
+    const deleteDialog = document.getElementById('delete-account-dialog');
+    const confirmDeleteForm = document.getElementById('confirmDeleteForm') as HTMLFormElement;
+    const cancelDeleteBtn = document.getElementById('cancel-delete-account');
+    const deleteError = document.getElementById('delete-error');
+    const logoutBtn = document.getElementById('logout-btn');
+    const saveAppearanceBtn = document.getElementById('save-appearance-btn');
+    const matrixRainCheckbox = document.getElementById('pref-matrix-rain') as HTMLInputElement;
+    const lightModeCheckbox = document.getElementById('pref-light-mode') as HTMLInputElement;
+    const fontSelect = document.getElementById('pref-font') as HTMLSelectElement;
 
-    // Fetch user details for the header
+    let selectedPic = 0;
+    let selectedColor = 'green';
+
+    const authHeaders = () => ({
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+    });
+
+    // Fetch user details and fill fields
     (async () => {
-        const res = await fetch('/api/users/me', {
-            headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-        });
-        if (res.ok && header) {
+        const res = await fetch('/api/users/me', { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } });
+        if (res.ok) {
             const user = await res.json();
-            header.textContent = `Username: ${user.username}`;
+            if (usernameInput) usernameInput.value = user.username || '';
+            selectedPic = user.profilePic ?? 0;
+            updatePicSelection(selectedPic);
+            const prefs = user.preferences || {};
+            if (matrixRainCheckbox) matrixRainCheckbox.checked = prefs.matrixRain !== false;
+            if (lightModeCheckbox) lightModeCheckbox.checked = prefs.lightMode === true;
+            if (fontSelect) fontSelect.value = prefs.font || 'neo-tech';
+            selectedColor = prefs.themeColor || 'green';
+            updateColorSelection(selectedColor);
         }
     })();
 
-    const validate = () => {
-      let isValid = true;
-      // Check if new same as old
-      if (passwordInput.value && oldPasswordInput.value === passwordInput.value) {
-          if (oldError) oldError.textContent = 'New password must be different.';
-          isValid = false;
-      } else if (oldError) { oldError.textContent = ''; }
-
-      // Strength check (8 characters minimum)
-      if (passwordInput.value.length > 0 && passwordInput.value.length < 8) {
-        if (passwordError) passwordError.textContent = 'Password is too weak (min 8 chars).';
-        isValid = false;
-      } else if (passwordError) {
-        passwordError.textContent = '';
-      }
-      // Match check
-      if (confirmInput.value.length > 0 && passwordInput.value !== confirmInput.value) {
-        if (matchError) matchError.textContent = 'Passwords do not match.';
-        isValid = false;
-      } else if (matchError) {
-        matchError.textContent = '';
-      }
-    form?.addEventListener('submit', async (e) => {
-
-        e.preventDefault();
-        if (!validate()) return;
-
-        const response = await fetch('/api/users/me', {
-            method: 'PATCH',
-            headers: { 
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('token')}`
-            },
-            body: JSON.stringify({ 
-                oldPassword: oldPasswordInput.value, 
-                newPassword: passwordInput.value 
-            })
+    // Profile picture chooser
+    function updatePicSelection(pic: number) {
+        document.querySelectorAll('.profile-pic-option').forEach(btn => {
+            btn.classList.toggle('selected', Number((btn as HTMLElement).dataset.pic) === pic);
         });
+    }
+    document.getElementById('profile-pic-chooser')?.addEventListener('click', async (e) => {
+        const btn = (e.target as HTMLElement).closest('.profile-pic-option') as HTMLElement | null;
+        if (!btn) return;
+        selectedPic = Number(btn.dataset.pic);
+        updatePicSelection(selectedPic);
+        // Update topbar profile icon
+        const topbarProfile = document.getElementById('topbar-profile');
+        if (topbarProfile) topbarProfile.innerHTML = PROFILE_PICS_SMALL[selectedPic] || PROFILE_PICS_SMALL[0];
+        localStorage.setItem('userProfilePic', String(selectedPic));
+        await fetch('/api/users/me', { method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ profilePic: selectedPic }) });
+    });
 
-        if (response.ok) {
-            alert('Password updated!');
-            form.reset();
+    // Theme color chooser
+    function updateColorSelection(color: string) {
+        document.querySelectorAll('.theme-swatch').forEach(btn => {
+            btn.classList.toggle('selected', (btn as HTMLElement).dataset.color === color);
+        });
+    }
+    document.getElementById('theme-color-chooser')?.addEventListener('click', (e) => {
+        const btn = (e.target as HTMLElement).closest('.theme-swatch') as HTMLElement | null;
+        if (!btn?.dataset.color) return;
+        selectedColor = btn.dataset.color;
+        updateColorSelection(selectedColor);
+        saveAndApplyAppearance();
+    });
+
+    // Helper: gather current prefs, apply instantly, and save to server
+    async function saveAndApplyAppearance() {
+        const prefs = {
+            matrixRain: matrixRainCheckbox?.checked ?? true,
+            lightMode: lightModeCheckbox?.checked ?? false,
+            font: fontSelect?.value || 'neo-tech',
+            themeColor: selectedColor,
+        };
+        applyTheme(prefs);
+        await fetch('/api/users/me', { method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ preferences: prefs }) });
+    }
+
+    // Instant-apply listeners for appearance controls
+    matrixRainCheckbox?.addEventListener('change', () => saveAndApplyAppearance());
+    lightModeCheckbox?.addEventListener('change', () => saveAndApplyAppearance());
+    fontSelect?.addEventListener('change', () => saveAndApplyAppearance());
+
+    // Username update
+    usernameForm?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const newName = usernameInput?.value.trim();
+        if (!newName) return;
+        const res = await fetch('/api/users/me', { method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ username: newName }) });
+        if (res.ok) {
+            if (usernameError) usernameError.textContent = '';
         } else {
-            const data = await response.json();
-            alert(data.error || 'Update failed');
+            const data = await res.json();
+            if (usernameError) usernameError.textContent = data.error || 'Update failed';
         }
     });
-    deleteBtn?.addEventListener('click', async () => {
-        const confirmed = window.confirm(
-            "Are you sure you want to delete your account? This action is permanent and all data will be lost."
-        );
 
-        if (confirmed) {
-            const response = await fetch('/api/users/me', {
-                method: 'DELETE',
-                headers: { 
-                    'Authorization': `Bearer ${localStorage.getItem('token')}` 
-                }
-            });
-
-            if (response.ok) {
-                // Remove the JWT so the router knows we are logged out
-                localStorage.removeItem('token');
-                alert('Account deleted successfully.');
-                window.location.hash = '#/';
-            } else {
-                const data = await response.json();
-                alert(data.error || 'Failed to delete account.');
-            }
-        }
-    });
-  }
+    // Password validation
+    const validate = () => {
+        let isValid = true;
+        if (passwordInput.value && oldPasswordInput.value === passwordInput.value) {
+            if (oldError) oldError.textContent = 'New password must be different.';
+            isValid = false;
+        } else if (oldError) { oldError.textContent = ''; }
+        if (passwordInput.value.length > 0 && passwordInput.value.length < 8) {
+            if (passwordError) passwordError.textContent = 'Password is too weak (min 8 chars).';
+            isValid = false;
+        } else if (passwordError) { passwordError.textContent = ''; }
+        if (confirmInput.value.length > 0 && passwordInput.value !== confirmInput.value) {
+            if (matchError) matchError.textContent = 'Passwords do not match.';
+            isValid = false;
+        } else if (matchError) { matchError.textContent = ''; }
+        return isValid;
+    };
     passwordInput?.addEventListener('input', validate);
     confirmInput?.addEventListener('input', validate);
 
-    form?.addEventListener('submit', async (e) => {
-      e.preventDefault();
-    
-      if (!validate()) return;     
-
-      const username = (document.getElementById('username') as HTMLInputElement).value;
-      const password = passwordInput.value;
-
-      const response = await fetch('/api/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
-      });
-
-      if (response.ok) {
-        alert('Account created! Please log in.');
-        window.location.hash = '#/login';
-      } else {
-        const errorData = await response.json();
-        alert(errorData.error || 'Signup failed');
-      }
+    pwdForm?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (!validate()) return;
+        const res = await fetch('/api/users/me', {
+            method: 'PATCH', headers: authHeaders(),
+            body: JSON.stringify({ oldPassword: oldPasswordInput.value, newPassword: passwordInput.value })
+        });
+        if (res.ok) { pwdForm.reset(); }
+        else { const data = await res.json(); if (matchError) matchError.textContent = data.error || 'Update failed'; }
     });
-  };
+
+    // Save appearance preferences (fallback button, hidden by default)
+    saveAppearanceBtn?.addEventListener('click', async () => {
+        await saveAndApplyAppearance();
+    });
+
+    // Logout
+    logoutBtn?.addEventListener('click', () => {
+        localStorage.removeItem('token');
+        localStorage.removeItem('userPreferences');
+        localStorage.removeItem('userProfilePic');
+        resetTheme();
+        window.location.hash = '#/login';
+    });
+
+    // Delete account dialog
+    deleteBtn?.addEventListener('click', () => { if (deleteDialog) deleteDialog.style.display = 'flex'; });
+    cancelDeleteBtn?.addEventListener('click', () => { if (deleteDialog) deleteDialog.style.display = 'none'; if (deleteError) deleteError.textContent = ''; });
+
+    confirmDeleteForm?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const username = (document.getElementById('delete-username') as HTMLInputElement).value;
+        const password = (document.getElementById('delete-password') as HTMLInputElement).value;
+        const loginCheck = await fetch('/api/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
+        if (!loginCheck.ok) { if (deleteError) deleteError.textContent = 'Incorrect username or password'; return; }
+        const response = await fetch('/api/users/me', { method: 'DELETE', headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } });
+        if (response.ok) {
+            localStorage.removeItem('token');
+            localStorage.removeItem('userPreferences');
+            localStorage.removeItem('userProfilePic');
+            if (deleteDialog) deleteDialog.style.display = 'none';
+            resetTheme();
+            alert('Account deleted successfully.');
+            window.location.hash = '#/';
+        } else {
+            const data = await response.json();
+            if (deleteError) deleteError.textContent = data.error || 'Failed to delete account.';
+        }
+    });
+};
+
+function applyTheme(prefs: { matrixRain?: boolean; lightMode?: boolean; font?: string; themeColor?: string }) {
+    localStorage.setItem('userPreferences', JSON.stringify(prefs));
+    (window as any).__applyTheme?.(prefs);
+}
+
+function resetTheme() {
+    localStorage.removeItem('userPreferences');
+    (window as any).__applyTheme?.({ matrixRain: true, lightMode: false, font: 'neo-tech', themeColor: 'green' });
+}
+
 export default { html, onLoad }

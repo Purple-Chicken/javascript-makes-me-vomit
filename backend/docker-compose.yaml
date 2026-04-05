@@ -12,7 +12,7 @@ services:
     image: mongo:4.4
     container_name: mongodb
     environment:
-      MONGODB_URI: "mongodb://localhost:27017/mydb"
+      MONGODB_URI: "mongodb://localhost:27017/"
       JWT_SECRET: "LOL"    
       ADMIN_USER: "admin"
       ADMIN_PASSWORD: "admin"
