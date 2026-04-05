@@ -4,6 +4,9 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/static/assets/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/src/css/main.css" />
     <title>SHA-257</title>
     <style>
@@ -25,17 +28,39 @@
       </a>
     </div>
     <nav>
-      <a href="#/" data-route="/">Home</a>
-      <a href="#/chat" data-route="/chat" id="nav-chat">Chat</a>
-      <a href="#/chat" id="nav-new-chat" style="display:none;">+ New Chat</a>
+      <button id="nav-toggle" title="Toggle sidebar" aria-label="Toggle sidebar">
+        <span></span><span></span><span></span>
+      </button>
+      <a href="#/" data-route="/">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" class="nav-icon"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        <span class="nav-label">Home</span>
+      </a>
+      <a href="#/chat" data-route="/chat" id="nav-chat">
+        <span class="nav-icon" style="font-family: 'IBM Plex Mono', monospace; font-size: 0.85em; font-weight: 600; width: 16px; display: inline-block;">&#62;_</span>
+        <span class="nav-label">New Chat</span>
+      </a>
+      <a href="#/chat" id="nav-new-chat" style="display:none;">
+        <span class="nav-icon" style="font-family: 'IBM Plex Mono', monospace; font-size: 0.85em; font-weight: 600; width: 16px; display: inline-block;">&#62;_</span>
+        <span class="nav-label">New Chat</span>
+      </a>
       <div id="sidebar-chats"></div>
-      <a href="#/history" data-route="/history">History</a>
+      <a href="#/history" id="nav-history" data-route="/history">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" class="nav-icon"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span class="nav-label">History</span>
+      </a>
     </nav>
     <div id="app"></div>
     
 
     <script type="module" src="/src/router.ts"></script>
-    <script src="/src/lib/matrixRain.js"></script>
-    <script src=""></script>
+    <script>
+      document.getElementById('nav-toggle').addEventListener('click', function() {
+        document.body.classList.toggle('nav-collapsed');
+        localStorage.setItem('navCollapsed', document.body.classList.contains('nav-collapsed') ? '1' : '0');
+      });
+      if (localStorage.getItem('navCollapsed') === '1') {
+        document.body.classList.add('nav-collapsed');
+      }
+    </script>
   </body>
 </html>

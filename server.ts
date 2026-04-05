@@ -207,6 +207,7 @@ app.post('/api/chat/stream', authenticateJWT, async (req, res) => {
     } else {
       const title = message.length > 60 ? message.slice(0, 60) + '…' : message;
       conversation = new Conversation({ userId, title, messages: [] });
+      await conversation.save(); // Persist immediately so the sidebar can show it before streaming ends
     }
 
     const ollamaMessages = [
@@ -227,6 +228,8 @@ app.post('/api/chat/stream', authenticateJWT, async (req, res) => {
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('X-Conversation-Id', String(conversation._id));
     res.flushHeaders();
+    // Send init chunk immediately so the client knows the conversation ID before LLM responds
+    res.write(JSON.stringify({ init: true, conversationId: String(conversation._id) }) + '\n');
 
     const ollamaRes = await fetch(`${OLLAMA_URL}/api/chat`, {
       method: 'POST',

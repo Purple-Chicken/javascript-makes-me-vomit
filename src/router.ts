@@ -6,7 +6,7 @@ import chatModule from './routes/chat.ts';
 import settingsModule from './routes/settings.ts'; // Sidebar
 import historyModule from './routes/history.ts';   // Sidebar
 import accountModule from './routes/account.ts';
-import { startMatrixRain } from './lib/matrixRain.ts';
+import { startMatrixRain, setMatrixColor, setMatrixLightMode } from './lib/matrixRain.ts';
 
 type Module = {
     html: string;
@@ -38,8 +38,23 @@ const TOPBAR_ICONS = [
   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24"><path d="M4 10l2-6 4 3h4l4-3 2 6"/><ellipse cx="12" cy="15" rx="7" ry="5"/><circle cx="10" cy="14" r="1"/><circle cx="14" cy="14" r="1"/><path d="M11 16.5l1 0.5 1-0.5"/></svg>`,
 ];
 
-const renderPage = (app: AppLike, html: string) => {
-  app.innerHTML = html;
+const renderPage = (app: AppLike, html: string): Promise<void> => {
+  const appElement = app as HTMLElement;
+
+  return new Promise((resolve) => {
+    // Fade out
+    appElement.style.opacity = '0';
+
+    // Wait for fade out to complete, then swap content and fade in
+    setTimeout(() => {
+      app.innerHTML = html;
+      // Force reflow to ensure opacity 0 is applied before setting to 1
+      void appElement.offsetHeight;
+      appElement.style.opacity = '1';
+      // Resolve after fade in is triggered
+      resolve();
+    }, 200);
+  });
 }
 
 async function checkAuth() {
@@ -79,9 +94,9 @@ export async function router(app: AppLike, path: string, modules: Record<string,
   }
 
   currentModule = targetModule;
-  
-  renderPage(app, currentModule.html);
-  
+
+  await renderPage(app, currentModule.html);
+
   if (typeof currentModule.onLoad === 'function') {
     currentModule.onLoad();
   }
@@ -138,7 +153,7 @@ export async function handleRoute() {
       } catch {}
     }
   } else {
-    if (topbarAuth) topbarAuth.style.display = '';
+    if (topbarAuth) topbarAuth.style.display = (path === '/login' || path === '/signup') ? 'none' : '';
     if (topbarProfile) topbarProfile.style.display = 'none';
   }
 
@@ -150,12 +165,17 @@ export async function handleRoute() {
     activeLink.classList.add('active');
   }
 
-  // Swap Chat / + New Chat button depending on current page
+  // Swap Chat / New Chat button depending on current page
   const navChat = document.getElementById('nav-chat');
   const navNewChat = document.getElementById('nav-new-chat');
   if (path === '/chat') {
     if (navChat) navChat.style.display = 'none';
-    if (navNewChat) navNewChat.style.display = '';
+    if (navNewChat) {
+      navNewChat.style.display = '';
+      // Only glow for brand-new chats (no id in URL)
+      const existingId = new URLSearchParams(location.hash.split('?')[1] || '').get('id');
+      if (!existingId) navNewChat.classList.add('active');
+    }
   } else {
     if (navChat) navChat.style.display = '';
     if (navNewChat) navNewChat.style.display = 'none';
@@ -165,7 +185,7 @@ export async function handleRoute() {
   await loadSidebarChats();
 }
 
-async function loadSidebarChats() {
+async function loadSidebarChats(activeId?: string) {
   const container = document.getElementById('sidebar-chats');
   if (!container) return;
 
@@ -175,6 +195,8 @@ async function loadSidebarChats() {
     return;
   }
 
+  const currentId = activeId || new URLSearchParams(location.hash.split('?')[1] || '').get('id');
+
   try {
     const res = await fetch('/api/conversations', {
       headers: { 'Authorization': `Bearer ${token}` }
@@ -183,13 +205,27 @@ async function loadSidebarChats() {
     const conversations: { id: string; title: string; updatedAt: string }[] = await res.json();
     conversations.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
     const recent = conversations.slice(0, 6);
-    container.innerHTML = recent.map(c =>
-      `<a href="#/chat?id=${encodeURIComponent(c.id)}" class="sidebar-chat-link" title="${c.title}">${c.title}</a>`
-    ).join('');
+    container.innerHTML = recent.length
+      ? `<div class="sidebar-section-label">Recent</div>` + recent.map(c =>
+          `<a href="#/chat?id=${encodeURIComponent(c.id)}" class="sidebar-chat-link${c.id === currentId ? ' current' : ''}" title="${c.title}"><span class="sidebar-chat-text">${c.title}</span></a>`
+        ).join('')
+      : '';
+
+    // Only apply fade mask when text actually overflows
+    requestAnimationFrame(() => {
+      container.querySelectorAll('.sidebar-chat-text').forEach(el => {
+        if (el.scrollWidth > el.clientWidth) el.classList.add('overflows');
+      });
+    });
   } catch {
     container.innerHTML = '';
   }
 }
+
+window.addEventListener('sidebar:refresh', (e: Event) => {
+  const activeId = (e as CustomEvent).detail?.activeId;
+  loadSidebarChats(activeId);
+});
 
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
   // Global theme applicator — called from account page and on load
@@ -200,22 +236,25 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     // Matrix rain
     if (canvas) canvas.style.display = prefs.matrixRain === false ? 'none' : '';
 
-    // Dark background when matrix rain is off (and not in light mode)
-    body.classList.toggle('no-rain', prefs.matrixRain === false && prefs.lightMode !== true);
+    // Dark background when matrix rain is off
+    body.classList.toggle('no-rain', prefs.matrixRain === false);
 
     // Light mode
     body.classList.toggle('light-mode', prefs.lightMode === true);
 
     // Font
-    body.classList.remove('font-sans', 'font-serif');
+    body.classList.remove('font-sans', 'font-serif', 'font-mono');
     if (prefs.font === 'sans') body.classList.add('font-sans');
     else if (prefs.font === 'serif') body.classList.add('font-serif');
+    else if (prefs.font === 'mono') body.classList.add('font-mono');
 
     // Theme color
     body.classList.remove('theme-blue', 'theme-purple', 'theme-amber');
     if (prefs.themeColor && prefs.themeColor !== 'green') {
       body.classList.add(`theme-${prefs.themeColor}`);
     }
+    setMatrixColor(prefs.themeColor || 'green');
+    setMatrixLightMode(prefs.lightMode === true);
   };
 
   // Apply saved preferences immediately
@@ -224,28 +263,28 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     try { (window as any).__applyTheme(JSON.parse(savedPrefs)); } catch {}
   }
 
-  window.addEventListener('load', () => {
-    startMatrixRain();
+  // Module scripts are deferred — DOM is fully parsed here, no need to wait for load
+  startMatrixRain();
 
-    // Re-apply after load in case canvas was reset
-    const sp = localStorage.getItem('userPreferences');
-    if (sp) { try { (window as any).__applyTheme(JSON.parse(sp)); } catch {} }
+  // Re-apply after init in case canvas state needs syncing
+  const sp = localStorage.getItem('userPreferences');
+  if (sp) { try { (window as any).__applyTheme(JSON.parse(sp)); } catch {} }
 
-    handleRoute();
+  handleRoute();
 
-    // New Chat nav button: force a fresh chat even if already on /chat
-    const navNewChat = document.getElementById('nav-new-chat');
-    navNewChat?.addEventListener('click', (e) => {
-      e.preventDefault();
-      // If already on /chat, force re-route to a blank chat
-      if (location.hash.startsWith('#/chat')) {
-        location.hash = '#/chat';
-        // hashchange won't fire if hash is identical, so manually trigger
-        handleRoute();
-      } else {
-        location.hash = '#/chat';
-      }
-    });
+  // New Chat nav button: force a fresh chat even if already on /chat
+  const navNewChat = document.getElementById('nav-new-chat');
+  navNewChat?.addEventListener('click', (e) => {
+    e.preventDefault();
+    // If already on /chat, force re-route to a blank chat
+    if (location.hash.startsWith('#/chat')) {
+      location.hash = '#/chat';
+      // hashchange won't fire if hash is identical, so manually trigger
+      handleRoute();
+    } else {
+      location.hash = '#/chat';
+    }
   });
+
   window.addEventListener('hashchange', handleRoute);
 }

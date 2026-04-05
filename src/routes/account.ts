@@ -30,31 +30,27 @@ const html=`
       </div>
     </div>
 
+    <p class="label" style="margin: 20px 0 8px; text-align: left;">Change Username</p>
     <form id="changeUsernameForm">
       <div class="input-group">
-        <label for="new-username" class="label">Username</label>
-        <input type="text" id="new-username" class="input" autocomplete="off">
+        <div class="input-prompt"><input type="text" id="new-username" class="input" autocomplete="off" placeholder="username"></div>
         <span id="username-error" class="error-message"></span>
       </div>
       <button class="button" type="submit">Update Username</button>
     </form>
 
-    <br>
-
+    <p class="label" style="margin: 28px 0 8px; text-align: left;">Change Password</p>
     <form id="changepwdForm">
       <div class="input-group">
-        <label for="old-password" class="label">Old Password</label>
-        <input type="password" id="old-password" class="input" required>
+        <div class="input-prompt"><input type="password" id="old-password" class="input" required placeholder="old password"></div>
         <span id="old-error" class="error-message"></span>
       </div>
       <div class="input-group">
-        <label for="password" class="label">New Password</label>
-        <input type="password" id="password" class="input">
+        <div class="input-prompt"><input type="password" id="password" class="input" placeholder="new password"></div>
         <span id="password-error" class="error-message"></span>
       </div>
       <div class="input-group">
-        <label for="password-confirm" class="label">Confirm Password</label>
-        <input type="password" id="password-confirm" class="input">
+        <div class="input-prompt"><input type="password" id="password-confirm" class="input" placeholder="confirm password"></div>
         <span id="match-error" class="error-message"></span>
       </div>
       <button class="button" type="submit">Update Password</button>
@@ -81,13 +77,26 @@ const html=`
       </label>
     </div>
 
-    <div class="setting-row">
+    <div class="setting-row" style="flex-direction: column; align-items: flex-start; gap: 8px;">
       <label class="label">Font</label>
-      <select id="pref-font" class="input" style="width: auto; min-width: 160px;">
-        <option value="neo-tech">Neo Tech (default)</option>
-        <option value="sans">Sans-serif</option>
-        <option value="serif">Serif</option>
-      </select>
+      <div id="font-sampler" class="font-sampler-grid">
+        <button class="font-option" data-font="ibm-plex" type="button">
+          <span class="font-preview" style="font-family: 'IBM Plex Mono', monospace;">SHA-257</span>
+          <span class="font-label">Terminal</span>
+        </button>
+        <button class="font-option" data-font="sans" type="button">
+          <span class="font-preview" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">SHA-257</span>
+          <span class="font-label">System Sans</span>
+        </button>
+        <button class="font-option" data-font="serif" type="button">
+          <span class="font-preview" style="font-family: Georgia, 'Times New Roman', serif;">SHA-257</span>
+          <span class="font-label">Serif</span>
+        </button>
+        <button class="font-option" data-font="mono" type="button">
+          <span class="font-preview" style="font-family: 'Courier New', Courier, monospace;">SHA-257</span>
+          <span class="font-label">Monospace</span>
+        </button>
+      </div>
     </div>
 
     <div class="setting-row">
@@ -107,7 +116,7 @@ const html=`
   <div class="box-container">
     <div style="display: flex; gap: 12px; justify-content: center;">
       <button id="logout-btn" class="button">Logout</button>
-      <button id="delete-btn" class="button button-danger" style="background-color: #ff4444;">Delete My Account</button>
+      <button id="delete-btn" class="button button-danger" style="display: inline-flex; align-items: center; gap: 8px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>Delete My Account</button>
     </div>
   </div>
 </div>
@@ -122,18 +131,16 @@ const html=`
     <p style="color: #ff6b6b; font-weight: 600;">Warning: This action is irreversible. All data will be permanently lost.</p>
     <form id="confirmDeleteForm">
       <div class="input-group">
-        <label for="delete-username" class="label">Username</label>
-        <input type="text" id="delete-username" class="input" required>
+        <div class="input-prompt"><input type="text" id="delete-username" class="input" required placeholder="username"></div>
       </div>
       <br>
       <div class="input-group">
-        <label for="delete-password" class="label">Password</label>
-        <input type="password" id="delete-password" class="input" required>
+        <div class="input-prompt"><input type="password" id="delete-password" class="input" required placeholder="password"></div>
       </div>
       <span id="delete-error" class="error-message"></span>
       <br>
       <div style="display: flex; gap: 12px; justify-content: center;">
-        <button type="submit" class="button button-danger" style="background-color: #ff4444;">Yes</button>
+        <button type="submit" class="button button-danger">Yes</button>
         <button type="button" id="cancel-delete-account" class="button">No</button>
       </div>
     </form>
@@ -160,10 +167,19 @@ const onLoad = () => {
     const saveAppearanceBtn = document.getElementById('save-appearance-btn');
     const matrixRainCheckbox = document.getElementById('pref-matrix-rain') as HTMLInputElement;
     const lightModeCheckbox = document.getElementById('pref-light-mode') as HTMLInputElement;
-    const fontSelect = document.getElementById('pref-font') as HTMLSelectElement;
 
     let selectedPic = 0;
     let selectedColor = 'green';
+    let selectedFont = 'ibm-plex';
+
+    function updateFontSelection(font: string) {
+        // Treat legacy 'neo-tech' value as the new default 'ibm-plex'
+        const normalized = font === 'neo-tech' ? 'ibm-plex' : font;
+        selectedFont = normalized;
+        document.querySelectorAll('.font-option').forEach(btn => {
+            btn.classList.toggle('selected', (btn as HTMLElement).dataset.font === normalized);
+        });
+    }
 
     const authHeaders = () => ({
         'Content-Type': 'application/json',
@@ -181,7 +197,7 @@ const onLoad = () => {
             const prefs = user.preferences || {};
             if (matrixRainCheckbox) matrixRainCheckbox.checked = prefs.matrixRain !== false;
             if (lightModeCheckbox) lightModeCheckbox.checked = prefs.lightMode === true;
-            if (fontSelect) fontSelect.value = prefs.font || 'neo-tech';
+            updateFontSelection(prefs.font || 'ibm-plex');
             selectedColor = prefs.themeColor || 'green';
             updateColorSelection(selectedColor);
         }
@@ -219,12 +235,20 @@ const onLoad = () => {
         saveAndApplyAppearance();
     });
 
+    // Font sampler click handler
+    document.getElementById('font-sampler')?.addEventListener('click', (e) => {
+        const btn = (e.target as HTMLElement).closest('.font-option') as HTMLElement | null;
+        if (!btn?.dataset.font) return;
+        updateFontSelection(btn.dataset.font);
+        saveAndApplyAppearance();
+    });
+
     // Helper: gather current prefs, apply instantly, and save to server
     async function saveAndApplyAppearance() {
         const prefs = {
             matrixRain: matrixRainCheckbox?.checked ?? true,
             lightMode: lightModeCheckbox?.checked ?? false,
-            font: fontSelect?.value || 'neo-tech',
+            font: selectedFont,
             themeColor: selectedColor,
         };
         applyTheme(prefs);
@@ -234,7 +258,6 @@ const onLoad = () => {
     // Instant-apply listeners for appearance controls
     matrixRainCheckbox?.addEventListener('change', () => saveAndApplyAppearance());
     lightModeCheckbox?.addEventListener('change', () => saveAndApplyAppearance());
-    fontSelect?.addEventListener('change', () => saveAndApplyAppearance());
 
     // Username update
     usernameForm?.addEventListener('submit', async (e) => {
@@ -328,7 +351,8 @@ function applyTheme(prefs: { matrixRain?: boolean; lightMode?: boolean; font?: s
 
 function resetTheme() {
     localStorage.removeItem('userPreferences');
-    (window as any).__applyTheme?.({ matrixRain: true, lightMode: false, font: 'neo-tech', themeColor: 'green' });
+    updateFontSelection('ibm-plex');
+    (window as any).__applyTheme?.({ matrixRain: true, lightMode: false, font: 'ibm-plex', themeColor: 'green' });
 }
 
 export default { html, onLoad }

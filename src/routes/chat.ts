@@ -8,9 +8,18 @@ const html = `
       <p class="start-hint">Start a conversation...</p>
     </div>
     <form id="chatForm" class="chat-input-bar">
-      <input type="text" id="chat-input" class="input" placeholder="Ask something..." autocomplete="off">
-      <button class="button" type="submit" id="send-btn">Send</button>
-      <button class="button stop-btn" type="button" id="stop-btn" style="display:none;">Stop</button>
+      <div class="chat-input-wrap">
+        <div class="input-prompt" style="flex: 1;"><input type="text" id="chat-input" class="input" placeholder="ask something..." autocomplete="off"></div>
+        <button class="send-btn-inner" type="submit" id="send-btn" title="Send">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        </button>
+        <button class="stop-btn" type="button" id="stop-btn" style="display:none;" title="Stop">
+          <svg class="stop-icon" viewBox="0 0 44 44" width="28" height="28">
+            <polygon class="stop-octagon" points="13,2 31,2 42,13 42,31 31,42 13,42 2,31 2,13"/>
+            <rect class="stop-square" x="15" y="15" width="14" height="14"/>
+          </svg>
+        </button>
+      </div>
     </form>
   </div>
 `;
@@ -41,14 +50,18 @@ const onLoad = () => {
       if (res.ok) {
         const data = await res.json();
         if (messages && Array.isArray(data.messages)) {
+          const copyBtn = `<button class="bubble-copy-btn" title="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>`;
           messages.innerHTML = data.messages.map((m: { role: string; content: string }) => {
             const cls = m.role === 'user' ? 'user' : 'llm';
             const label = m.role === 'user' ? 'You' : 'LLM';
-            return `<div class="chat-bubble ${cls}"><div class="bubble-role">${label}</div><p>${escapeHtml(m.content)}</p></div>`;
+            const copy = copyBtn;
+            return `<div class="chat-message ${cls}">${copy}<div class="chat-bubble ${cls}"><div class="bubble-role">${label}</div><p>${escapeHtml(m.content)}</p></div></div>`;
           }).join('');
           messages.scrollTo(0, messages.scrollHeight);
         }
       }
+      // Highlight this conversation in the sidebar
+      window.dispatchEvent(new CustomEvent('sidebar:refresh', { detail: { activeId: activeConversationId } }));
     })();
   }
 
@@ -64,23 +77,29 @@ const onLoad = () => {
     stopBtn.style.display = '';
     abortController = new AbortController();
 
+    // Stop the New Chat button glowing once user has sent a message
+    document.getElementById('nav-new-chat')?.classList.remove('active');
+
     // Clear start hint if present
     const hint = messages?.querySelector('.start-hint');
     if (hint) hint.remove();
 
+    const copyBtnSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
+
     // Append user bubble
-    const userBubble = document.createElement('div');
-    userBubble.className = 'chat-bubble user';
-    userBubble.innerHTML = `<div class="bubble-role">You</div><p>${escapeHtml(text)}</p>`;
-    messages?.appendChild(userBubble);
+    const userMessage = document.createElement('div');
+    userMessage.className = 'chat-message user';
+    userMessage.innerHTML = `<button class="bubble-copy-btn" title="Copy">${copyBtnSvg}</button><div class="chat-bubble user"><div class="bubble-role">You</div><p>${escapeHtml(text)}</p></div>`;
+    messages?.appendChild(userMessage);
     input.value = '';
     messages?.scrollTo(0, messages.scrollHeight);
 
     // Create LLM bubble with spinner
-    const llmBubble = document.createElement('div');
-    llmBubble.className = 'chat-bubble llm';
-    llmBubble.innerHTML = `<div class="bubble-role">LLM</div><div class="thinking-section" style="display:none;"><button class="thinking-toggle" type="button"><span class="spinner"></span> Thinking…</button><div class="thinking-content" style="display:none;"></div></div><div class="llm-spinner"><span class="spinner"></span></div><p class="llm-text"></p>`;
-    messages?.appendChild(llmBubble);
+    const llmMessage = document.createElement('div');
+    llmMessage.className = 'chat-message llm';
+    llmMessage.innerHTML = `<button class="bubble-copy-btn" title="Copy">${copyBtnSvg}</button><div class="chat-bubble llm"><div class="bubble-role">LLM</div><div class="thinking-section" style="display:none;"><button class="thinking-toggle" type="button"><span class="spinner"></span> Thinking…</button><div class="thinking-content" style="display:none;"></div></div><div class="llm-spinner"><span class="spinner"></span></div><p class="llm-text"></p></div>`;
+    messages?.appendChild(llmMessage);
+    const llmBubble = llmMessage.querySelector('.chat-bubble') as HTMLElement;
     messages?.scrollTo(0, messages.scrollHeight);
 
     const thinkingSection = llmBubble.querySelector('.thinking-section') as HTMLElement;
@@ -134,9 +153,18 @@ const onLoad = () => {
           try {
             const chunk = JSON.parse(line);
 
+            if (chunk.init) {
+              if (chunk.conversationId && !activeConversationId) {
+                activeConversationId = chunk.conversationId;
+                window.dispatchEvent(new CustomEvent('sidebar:refresh', { detail: { activeId: activeConversationId } }));
+              }
+              continue;
+            }
+
             if (chunk.done) {
               if (chunk.conversationId && !activeConversationId) {
                 activeConversationId = chunk.conversationId;
+                window.dispatchEvent(new CustomEvent('sidebar:refresh', { detail: { activeId: activeConversationId } }));
               }
               continue;
             }
@@ -206,12 +234,6 @@ const onLoad = () => {
         textEl.innerHTML = '<em>No response.</em>';
       }
 
-      // Set conversation id from header if not received in stream
-      if (!activeConversationId) {
-        const hdrId = res.headers.get('X-Conversation-Id');
-        if (hdrId) activeConversationId = hdrId;
-      }
-
     } catch (err: any) {
       spinnerEl.style.display = 'none';
       if (err.name === 'AbortError') {
@@ -253,6 +275,39 @@ const onLoad = () => {
       abortController.abort();
     }
   });
+
+  // Copy button handler (event delegation)
+  messages?.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest('.bubble-copy-btn') as HTMLElement | null;
+    if (!btn) return;
+    const message = btn.closest('.chat-message');
+    const bubble = message?.querySelector('.chat-bubble');
+    const text = (bubble?.querySelector('.llm-text') || bubble?.querySelector('p'))?.textContent?.trim() ?? '';
+    if (!text) return;
+
+    const orig = btn.innerHTML;
+    const check = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><polyline points="20 6 9 17 4 12"/></svg>`;
+    const showCheck = () => { btn.innerHTML = check; setTimeout(() => { btn.innerHTML = orig; }, 1500); };
+
+    const fallback = () => {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch {}
+      document.body.removeChild(ta);
+      showCheck();
+    };
+
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(showCheck).catch(fallback);
+    } else {
+      fallback();
+    }
+  });
+
 
 };
 
