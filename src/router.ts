@@ -93,13 +93,13 @@ export async function handleRoute() {
   await router(app, path, modules);
 
   // Update nav active state
-  const navLinks = document.querySelectorAll('nav a');
+  const navLinks = document.querySelectorAll('nav a') as NodeListOf<HTMLElement>;
   // Show all links first
   navLinks.forEach(link => link.style.display = '');
   // Remove active class from all
   navLinks.forEach(link => link.classList.remove('active'));
   // Set active and hide the current page link
-  const activeLink = document.querySelector(`nav a[data-route="${path}"]`);
+  const activeLink = document.querySelector(`nav a[data-route="${path}"]`) as HTMLElement | null ;
   if (activeLink) {
     activeLink.classList.add('active');
     activeLink.style.display = 'none';

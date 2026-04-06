@@ -53,7 +53,7 @@ const onLoad = () => {
         }
     })();
 
-    const validate = () => {
+    const validate = (): boolean => {
       let isValid = true;
       // Check if new same as old
       if (passwordInput.value && oldPasswordInput.value === passwordInput.value) {
@@ -124,6 +124,7 @@ const onLoad = () => {
             }
         }
     });
+    return isValid;
   }
     passwordInput?.addEventListener('input', validate);
     confirmInput?.addEventListener('input', validate);
