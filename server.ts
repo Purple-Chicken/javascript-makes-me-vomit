@@ -190,6 +190,7 @@ app.post('/api/chat', authenticateJWT, async (req, res) => {
 
 // POST /api/chat/stream — streamed version, sends NDJSON tokens + thinking
 app.post('/api/chat/stream', authenticateJWT, async (req, res) => {
+  let conversation: any;
   try {
     const { message, conversationId } = req.body;
     const userId = (req.user as any)._id;
@@ -198,7 +199,6 @@ app.post('/api/chat/stream', authenticateJWT, async (req, res) => {
       return res.status(400).json({ error: 'message is required' });
     }
 
-    let conversation;
     if (conversationId) {
       conversation = await Conversation.findOne({ _id: conversationId, userId });
       if (!conversation) {
@@ -243,6 +243,10 @@ app.post('/api/chat/stream', authenticateJWT, async (req, res) => {
     });
 
     if (!ollamaRes.ok || !ollamaRes.body) {
+      // Remove the empty conversation that was pre-saved for the sidebar
+      if (conversation.messages.length === 0) {
+        await Conversation.findByIdAndDelete(conversation._id);
+      }
       res.write(JSON.stringify({ error: 'Ollama error' }) + '\n');
       res.end();
       return;
@@ -304,6 +308,8 @@ app.post('/api/chat/stream', authenticateJWT, async (req, res) => {
       res.end();
     }
   } catch (err: any) {
+    // Remove the empty conversation that was pre-saved for the sidebar
+    try { if (conversation && conversation.messages.length === 0) await Conversation.findByIdAndDelete(conversation._id); } catch {}
     try { res.write(JSON.stringify({ error: err.message || 'Chat failed' }) + '\n'); } catch {}
     try { res.end(); } catch {}
   }
