@@ -1,0 +1,489 @@
+/* ── HEARYE MODE STASH ──
+   Extracted from src/css/main.css
+   Re-integrate by adding back to main.css and re-enabling the other stash files.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/* Dark/light icon toggling */
+.hearye-only { display: none; }
+body.hearye-mode .hearye-hidden { display: none; }
+body.hearye-mode .hearye-only { display: inline-block; }
+
+/* Larger detailed icons in light mode */
+body.hearye-mode nav a .nav-icon.hearye-only {
+  width: 22px;
+  height: 22px;
+}
+
+/* Home page subtitle — Lora italic in light mode */
+body.hearye-mode .home-subtitle {
+  font-family: 'Lora', Georgia, serif !important;
+  font-style: italic;
+  text-transform: none !important;
+  letter-spacing: 0.04em !important;
+  font-size: 1em !important;
+}
+
+/* Quill / terminal icon toggle */
+.nav-icon-quill { display: none; }
+body.hearye-mode .nav-icon-terminal { display: none !important; }
+body.hearye-mode .nav-icon-quill { display: inline-block; width: 16px; height: 16px; flex-shrink: 0; }
+
+/* Literary backdrop only on home page in light mode */
+body.hearye-mode:not([data-route="/"]) #matrix-canvas,
+body.hearye-mode:not([data-route="/"]) #matrix-overlay { display: none; }
+
+/* Neutral muted swatches in light mode */
+body.hearye-mode .theme-swatch[data-color="green"] { background: #6b4c1a !important; }
+body.hearye-mode .theme-swatch[data-color="blue"]   { background: #1a3566 !important; }
+body.hearye-mode .theme-swatch[data-color="purple"] { background: #5c1a42 !important; }
+body.hearye-mode .theme-swatch[data-color="amber"]  { background: #8b5e15 !important; }
+body.hearye-mode .theme-swatch { border-color: transparent; }
+body.hearye-mode .theme-swatch:hover { box-shadow: 0 0 8px rgba(80,50,10,0.3); }
+body.hearye-mode .theme-swatch.selected { border-color: rgba(80,50,10,0.7); box-shadow: 0 0 10px rgba(80,50,10,0.3); }
+
+/* no-rain override */
+body.hearye-mode.no-rain {
+  background: #e8e0cc;
+}
+
+/* ============================================================
+   TYPEWRITER-STEAMPUNK LIGHT MODE
+   Aged parchment + ink aesthetic — contrasts the dark hacker theme
+   ============================================================ */
+
+/* Parchment body background — layered CSS gradients, no images */
+body.hearye-mode {
+  --bg: #e8e0cc;
+  --surface: #faf7f0;
+  --text-color: #1c1008;
+  --text-muted: #6b5a3e;
+  --text-ink: #1c1008;
+  /* Default ink-sepia accent (green theme maps to sepia ink) */
+  --accent: rgba(80, 52, 20, 0.95);
+  --accent-glow: rgba(120, 80, 30, 0.22);
+  --border: rgba(90, 60, 20, 0.38);
+  --parchment-light: #faf7f0;
+  --parchment-mid: #ede5cf;
+  --parchment-dark: #d6c9a8;
+  font-family: 'Lora', Georgia, serif;
+  color: #1c1008 !important;
+  background:
+    /* Subtle vignette edges */
+    radial-gradient(ellipse at top left, rgba(101, 67, 20, 0.08) 0%, transparent 55%),
+    radial-gradient(ellipse at bottom right, rgba(101, 67, 20, 0.1) 0%, transparent 55%),
+    /* Fine diagonal grain lines */
+    repeating-linear-gradient(
+      108deg,
+      transparent,
+      transparent 28px,
+      rgba(140, 100, 40, 0.025) 28px,
+      rgba(140, 100, 40, 0.025) 29px
+    ),
+    /* Base parchment */
+    linear-gradient(160deg, #ede8d8 0%, #e4dbc6 40%, #ddd3b8 70%, #e8e0cc 100%);
+}
+
+/* Steampunk per-theme accent overrides (all shifted to aged/ink tones) */
+body.hearye-mode.theme-blue {
+  --accent: rgba(20, 55, 120, 0.95);
+  --accent-glow: rgba(20, 55, 120, 0.22);
+  --border: rgba(20, 55, 120, 0.35);
+}
+body.hearye-mode.theme-purple {
+  --accent: rgba(80, 20, 90, 0.95);
+  --accent-glow: rgba(80, 20, 90, 0.22);
+  --border: rgba(80, 20, 90, 0.35);
+}
+body.hearye-mode.theme-amber {
+  --accent: rgba(130, 70, 0, 0.95);
+  --accent-glow: rgba(130, 70, 0, 0.22);
+  --border: rgba(130, 70, 0, 0.38);
+}
+
+/* Page titles — letterpress ink stamped effect */
+body.hearye-mode h1 {
+  color: var(--text-ink);
+  text-shadow:
+    1px 1px 0 rgba(255,245,220,0.7),
+    -1px -1px 0 rgba(0,0,0,0.08);
+}
+/* Standalone page titles (outside box-container) — parchment pill so they read over the backdrop */
+body.hearye-mode h1:not(.box-container h1):not(.chat-header h1) {
+  display: inline-block;
+  background: rgba(232, 220, 190, 0.82);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  padding: 6px 24px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(140,100,40,0.25);
+  box-shadow: 0 2px 12px rgba(80,50,10,0.15);
+  text-shadow:
+    1px 1px 0 rgba(255,248,225,0.8),
+    -1px -1px 0 rgba(0,0,0,0.06);
+}
+body.hearye-mode h2 {
+  color: var(--text-ink);
+  text-shadow: 1px 1px 0 rgba(255,245,220,0.6);
+}
+body.hearye-mode p,
+body.hearye-mode .label,
+body.hearye-mode strong,
+body.hearye-mode .bubble-role { color: var(--text-ink); }
+
+/* Sidebar — aged leather/wood panel */
+body.hearye-mode nav {
+  background: linear-gradient(180deg, #2e2318 0%, #3a2c1a 60%, #2a1f12 100%);
+  border-right: 1px solid rgba(160, 110, 40, 0.5);
+  box-shadow: 3px 0 16px rgba(0,0,0,0.35), inset -1px 0 0 rgba(200,150,60,0.15);
+}
+body.hearye-mode nav a {
+  color: #d4b87a;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+body.hearye-mode nav a:hover {
+  background: rgba(200, 150, 60, 0.1);
+  color: #e8cc94;
+  box-shadow: none;
+  border-color: transparent;
+}
+body.hearye-mode nav a.active {
+  background: rgba(200, 150, 60, 0.15);
+  border-color: rgba(200, 150, 60, 0.5);
+  color: #f0d898;
+  box-shadow: inset 0 0 8px rgba(200,150,60,0.1);
+}
+body.hearye-mode .sidebar-section-label { color: rgba(200,160,80,0.6); }
+body.hearye-mode .sidebar-chat-link {
+  color: #c4a868;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+body.hearye-mode .sidebar-chat-link:hover {
+  background: rgba(200,150,60,0.1);
+  color: #e0c080;
+  box-shadow: none;
+}
+body.hearye-mode #nav-toggle span { background: #c4a868; }
+
+/* Topbar */
+body.hearye-mode #topbar { background: transparent; }
+
+/* Box containers — aged paper cards with warm shadow */
+body.hearye-mode .box-container {
+  background: linear-gradient(145deg, #fdfaf3 0%, #f5eedb 50%, #ede5cc 100%);
+  border: 1px solid rgba(140, 100, 40, 0.35);
+  box-shadow:
+    0 4px 20px rgba(80, 50, 10, 0.18),
+    0 1px 0 rgba(255,245,210,0.8) inset,
+    0 -1px 0 rgba(140,100,30,0.15) inset;
+}
+
+/* Topbar buttons & profile icon */
+body.hearye-mode .topbar-btn {
+  background: linear-gradient(145deg, #faf5e8, #ede0c0);
+  color: var(--text-ink);
+  border-color: rgba(140,100,40,0.45);
+  box-shadow: 0 1px 4px rgba(80,50,10,0.2), inset 0 1px 0 rgba(255,245,210,0.7);
+}
+body.hearye-mode .topbar-btn:hover {
+  background: linear-gradient(145deg, #fff8f0, #f0e4c5);
+  box-shadow: 0 2px 8px rgba(80,50,10,0.25), inset 0 1px 0 rgba(255,245,210,0.8);
+}
+body.hearye-mode .profile-icon {
+  background: linear-gradient(145deg, #faf5e8, #ede0c0);
+  color: var(--text-ink);
+  border-color: rgba(140,100,40,0.45);
+  box-shadow: 0 1px 4px rgba(80,50,10,0.2);
+}
+body.hearye-mode .profile-icon:hover {
+  box-shadow: 0 2px 8px rgba(80,50,10,0.3);
+  border-color: var(--accent);
+}
+
+/* Buttons — aviation panel switch: beveled brass, rectangular, physical press */
+body.hearye-mode .button {
+  background: linear-gradient(
+    160deg,
+    #f8edd8 0%,
+    #d4a83c 28%,
+    #b88820 52%,
+    #c89838 76%,
+    #e8c870 100%
+  );
+  color: rgba(38, 20, 2, 0.92);
+  border: 2px solid rgba(100, 65, 5, 0.65);
+  border-radius: 5px;
+  box-shadow:
+    inset  2px  2px 5px rgba(255, 245, 195, 0.55),
+    inset -2px -2px 5px rgba(70,  42,  2,  0.45),
+    0 4px 8px rgba(60, 38, 2, 0.32),
+    0 1px 0   rgba(255, 242, 165, 0.5);
+  text-shadow:
+    0  1px 0 rgba(255, 245, 195, 0.45),
+    0 -1px 0 rgba(60, 38, 2, 0.25);
+  transform: translateY(0);
+  transition: transform 0.1s ease, box-shadow 0.1s ease, background 0.15s ease;
+}
+body.hearye-mode .button:hover {
+  background: linear-gradient(
+    160deg,
+    #fdf5e0 0%,
+    #ddb848 28%,
+    #c09830 52%,
+    #d0a848 76%,
+    #f0d880 100%
+  );
+  box-shadow:
+    inset  2px  2px 6px rgba(255, 248, 200, 0.65),
+    inset -2px -2px 6px rgba(70, 42, 2, 0.5),
+    0 5px 10px rgba(60, 38, 2, 0.38),
+    0 1px 0    rgba(255, 245, 170, 0.6);
+  transform: translateY(-1px);
+}
+body.hearye-mode .button:active {
+  background: linear-gradient(
+    160deg,
+    #b08820 0%,
+    #9a7818 28%,
+    #c09028 52%,
+    #b08820 100%
+  );
+  box-shadow:
+    inset  3px  3px 7px rgba(60, 38, 2, 0.55),
+    inset -1px -1px 3px rgba(255, 245, 195, 0.2),
+    0 1px 3px rgba(60, 38, 2, 0.2);
+  transform: translateY(2px);
+}
+
+/* Input fields */
+body.hearye-mode .input {
+  background: transparent;
+  color: var(--text-ink);
+  border-bottom: 1px solid var(--accent);
+  border-bottom-color: var(--accent);
+}
+body.hearye-mode .input::placeholder { color: rgba(80,50,20,0.38); }
+body.hearye-mode .input:focus { box-shadow: 0 2px 6px -2px var(--accent-glow); }
+body.hearye-mode .input-prompt::before {
+  content: '×';
+  color: var(--accent);
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 1.2em;
+  font-style: italic;
+  opacity: 0.75;
+}
+
+/* Toggle switches — aviation cockpit flip switch */
+body.hearye-mode .toggle-switch {
+  width: 30px;
+  height: 50px;
+  vertical-align: middle;
+}
+body.hearye-mode .toggle-slider {
+  background: linear-gradient(180deg, #1e1610 0%, #2e2318 40%, #3a2c1a 60%, #2a1f12 100%);
+  border: 2px solid rgba(90,58,15,0.9);
+  border-radius: 4px;
+  box-shadow:
+    inset 0 3px 6px rgba(0,0,0,0.7),
+    inset 0 -2px 4px rgba(200,150,60,0.15),
+    0 3px 8px rgba(0,0,0,0.55),
+    0 1px 0 rgba(220,175,80,0.25);
+}
+body.hearye-mode .toggle-slider::before {
+  content: '';
+  width: 18px;
+  height: 16px;
+  left: 50%;
+  bottom: 5px;
+  top: auto;
+  transform: translateX(-50%);
+  background: linear-gradient(160deg, #f8edd8 0%, #d4a83c 35%, #b88820 58%, #c89838 78%, #e8c870 100%);
+  border: 1px solid rgba(100,65,5,0.7);
+  border-radius: 3px;
+  box-shadow:
+    inset 1px 1px 3px rgba(255,245,195,0.65),
+    inset -1px -1px 3px rgba(70,42,2,0.55),
+    0 2px 5px rgba(0,0,0,0.5);
+  font-size: 0;
+}
+body.hearye-mode .toggle-switch input:checked + .toggle-slider {
+  background: linear-gradient(180deg, #1e1610 0%, #2e2318 40%, #3a2c1a 60%, #2a1f12 100%);
+  box-shadow:
+    inset 0 3px 6px rgba(0,0,0,0.7),
+    inset 0 -2px 4px rgba(200,150,60,0.15),
+    0 3px 8px rgba(0,0,0,0.55),
+    0 1px 0 rgba(220,175,80,0.25);
+}
+body.hearye-mode .toggle-switch input:checked + .toggle-slider::before {
+  bottom: auto;
+  top: 5px;
+  transform: translateX(-50%);
+  background: linear-gradient(340deg, #f8edd8 0%, #d4a83c 35%, #b88820 58%, #c89838 78%, #e8c870 100%);
+}
+
+/* Chat area */
+body.hearye-mode .chat-header {
+  background: rgba(232, 224, 200, 0.9);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border-bottom: 1px solid rgba(140,100,40,0.2);
+}
+body.hearye-mode .chat-input-wrap {
+  background: rgba(232, 224, 200, 0.92);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+body.hearye-mode #chat-messages { color: var(--text-ink); }
+body.hearye-mode #chat-messages .start-hint { text-shadow: none; color: var(--text-muted); }
+
+/* Chat bubbles — paper note / telegram style */
+body.hearye-mode .chat-bubble { color: var(--text-ink); font-size: 0.97em; }
+body.hearye-mode .chat-bubble.user {
+  background: linear-gradient(145deg, #fdfaf3, #f2e9d0);
+  border-color: rgba(140,100,40,0.3);
+  box-shadow: 1px 2px 6px rgba(80,50,10,0.1), inset 0 1px 0 rgba(255,250,230,0.7);
+}
+body.hearye-mode .chat-bubble.llm {
+  background: linear-gradient(145deg, #ffffff, #faf5e8);
+  border-color: rgba(140,100,40,0.2);
+  box-shadow: 1px 2px 8px rgba(80,50,10,0.1), inset 0 1px 0 rgba(255,255,255,0.9);
+}
+
+/* History items */
+body.hearye-mode .history-item {
+  background: linear-gradient(145deg, #fdfaf3, #f5eedc);
+  border-color: rgba(140,100,40,0.3);
+  box-shadow: 0 2px 8px rgba(80,50,10,0.1);
+}
+body.hearye-mode .history-download-btn {
+  background: linear-gradient(135deg, #f5ecd5, #e4d5a8);
+  border-color: rgba(130,90,20,0.5);
+  color: var(--accent);
+}
+body.hearye-mode .history-download-btn:hover { background: linear-gradient(135deg, #fdf4e0, #eee0b5); }
+body.hearye-mode .history-delete-btn { background: rgba(180, 40, 20, 0.07); border-color: rgba(160,30,20,0.45); color: #9b1c1c; }
+body.hearye-mode .history-delete-btn:hover { background: rgba(180,40,20,0.15); }
+
+/* Danger button */
+body.hearye-mode .button.button-danger {
+  background: linear-gradient(160deg, #fde8e8, #f0cccc);
+  border-color: rgba(180,30,30,0.5);
+  color: #8b1a1a;
+  box-shadow: 0 2px 6px rgba(150,30,30,0.15), inset 0 1px 0 rgba(255,240,240,0.7);
+  text-shadow: none;
+}
+body.hearye-mode .button.button-danger:hover {
+  background: linear-gradient(160deg, #fef0f0, #f5d5d5);
+  box-shadow: 0 3px 10px rgba(150,30,30,0.22);
+}
+
+/* Spinner in light mode */
+body.hearye-mode .thinking-toggle { color: var(--text-muted); border-color: rgba(130,90,30,0.2); }
+body.hearye-mode .thinking-content { background: rgba(200,170,100,0.07); border-color: rgba(130,90,30,0.2); color: var(--text-muted); }
+body.hearye-mode .spinner { border-color: rgba(130,90,30,0.2); border-top-color: var(--accent); }
+
+/* Font sampler */
+body.hearye-mode .font-option {
+  background: linear-gradient(145deg, #fdfaf3, #f0e8d0);
+  border-color: rgba(140,100,40,0.3);
+}
+body.hearye-mode .font-option.selected {
+  background: color-mix(in srgb, var(--accent) 10%, #f5eedc);
+  border-color: var(--accent);
+}
+body.hearye-mode .font-option { background: #fff; }
+body.hearye-mode .font-option.selected { background: color-mix(in srgb, var(--accent) 8%, #fff); }
+
+/* Profile pic chooser */
+body.hearye-mode .profile-pic-option {
+  background: linear-gradient(145deg, #faf5e8, #ede0c0);
+  border-color: rgba(140,100,40,0.35);
+}
+body.hearye-mode .profile-pic-option:hover { border-color: var(--accent); box-shadow: 0 0 8px var(--accent-glow); }
+body.hearye-mode .profile-pic-option.selected { border-color: var(--accent); box-shadow: 0 0 10px var(--accent-glow); }
+
+/* ── Light mode typography: Victorian/literary ──────────────────────────────
+   Headings: Playfair Display (elegant high-contrast serif)
+   Body:     Lora (warm literary serif)
+   Inputs:   IBM Plex Mono kept (typewriter authenticity)
+   ───────────────────────────────────────────────────────────────────────── */
+
+/* Headings — Playfair Display, always, regardless of font-choice class */
+body.hearye-mode h1,
+body.hearye-mode h2,
+body.hearye-mode h3,
+body.hearye-mode h4,
+body.hearye-mode h5,
+body.hearye-mode h6,
+body.hearye-mode.font-sans h1, body.hearye-mode.font-sans h2, body.hearye-mode.font-sans h3,
+body.hearye-mode.font-serif h1, body.hearye-mode.font-serif h2, body.hearye-mode.font-serif h3,
+body.hearye-mode.font-mono h1, body.hearye-mode.font-mono h2, body.hearye-mode.font-mono h3 {
+  font-family: 'Playfair Display', Georgia, serif;
+  letter-spacing: 0.01em;
+}
+
+/* h1 specifically — italic for more character */
+body.hearye-mode h1 {
+  font-style: italic;
+  font-weight: 700;
+}
+
+/* Body font choices in light mode (body already defaults to Lora via body.hearye-mode) */
+body.hearye-mode.font-sans { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; }
+body.hearye-mode.font-serif { font-family: 'Lora', Georgia, serif; }
+body.hearye-mode.font-mono { font-family: 'IBM Plex Mono', 'Courier New', monospace; }
+
+/* Buttons — Playfair Display italic, drop uppercase */
+body.hearye-mode .button,
+body.hearye-mode .topbar-btn {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-style: italic;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+
+/* Labels — Lora, slightly muted weight */
+body.hearye-mode .label {
+  font-family: 'Lora', Georgia, serif;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+/* Nav labels — Lora */
+body.hearye-mode .nav-label,
+body.hearye-mode .sidebar-section-label,
+body.hearye-mode .sidebar-chat-link {
+  font-family: 'Lora', Georgia, serif;
+}
+
+/* Chat role labels — Playfair Display small italic */
+body.hearye-mode .bubble-role {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-style: italic;
+  font-size: 0.8em;
+  letter-spacing: 0.04em;
+}
+
+/* Keep inputs typewriter / IBM Plex Mono */
+body.hearye-mode .input,
+body.hearye-mode .input::placeholder,
+body.hearye-mode pre,
+body.hearye-mode code {
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+/* History item titles — Lora */
+body.hearye-mode .history-item strong {
+  font-family: 'Lora', Georgia, serif;
+  font-weight: 600;
+}
+
+/* Font sampler labels in light mode */
+body.hearye-mode .font-label {
+  font-family: 'Lora', Georgia, serif;
+  font-style: italic;
+}

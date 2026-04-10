@@ -2,36 +2,44 @@
 
 
 const html=`
-    <div class="box-container">
-<h1>Login</h1>
-        <h2 class="text-center">Login</h2>
-        <br>
+    <div class="box-container" style="display: flex; flex-direction: column;">
+        <h1>Login</h1>
         <form id="loginForm" class="loginForm">
             <div class="input-group">
-                <label for="username" class="label">Username</label>
-                <input type="text" id="username" class="input">
+                <div class="input-prompt"><input type="text" id="username" class="input" placeholder="username"></div>
                 <span class="error-message"></span>
             </div>
             <br>
             <div class="input-group">
-                <label for="password" class="label">Password</label>
-                <input type="password" id="password" class="input">
+                <div class="input-prompt"><input type="password" id="password" class="input" placeholder="password"></div>
                 <span class="error-message"></span>
             </div>
-            <br> 
-            <div class="input-group">
-                <label for="remember-me" class="label">Remember Me</label>
-                <input type="checkbox" id="remember-me" class="input">
-                <span class="error-message"></span>
+            <div style="display: flex; align-items: center; justify-content: space-between; margin: 10px 0 20px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <input type="checkbox" id="remember-me" style="width: auto; margin: 0;">
+                    <label for="remember-me" class="label" style="margin: 0; font-size: 0.85em; opacity: 0.7;">Remember Me</label>
+                </div>
+                <a href="#" id="forgot-password" style="color: var(--accent, #4dff91); opacity: 0.6; font-size: 0.78em; text-decoration: none;">Forgot password?</a>
             </div>
-            <br>
-            <button class="button" type="submit">Login</button>
+            <button class="button" type="submit" style="width: 100%;">Login</button>
         </form>
-        <p>Don't have an account? <button class="button" onclick="window.location.hash='#/signup'">Sign Up</button> </p>
+        <p style="margin-top: auto; padding-top: 24px; font-size: 0.78em; opacity: 0.6; text-align: center;">Don't have an account? <a href="#" onclick="window.location.hash='#/signup'; return false;" style="color: var(--accent, #4dff91); text-decoration: none; opacity: 1;">Sign Up</a></p>
     </div>
-`; 
+`;
 const onLoad = () => {
     const form = document.getElementById('loginForm') as HTMLFormElement;
+
+    const prefill = sessionStorage.getItem('prefill-username');
+    if (prefill) {
+      (document.getElementById('username') as HTMLInputElement).value = prefill;
+      sessionStorage.removeItem('prefill-username');
+    }
+
+    document.getElementById('forgot-password')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      alert('womp womp');
+    });
+
     form?.addEventListener('submit', async (e) => {
       e.preventDefault();
       const username = (document.getElementById('username') as HTMLInputElement).value;
@@ -47,7 +55,7 @@ const onLoad = () => {
       if (response.ok) {
         const data = await response.json();
         localStorage.setItem('token', data.token);
-        
+
         window.location.hash = '#/chat';
       } else {
         const errorData = await response.json();
@@ -55,5 +63,5 @@ const onLoad = () => {
       }
     });
   }
-  
+
   export default { html, onLoad };
