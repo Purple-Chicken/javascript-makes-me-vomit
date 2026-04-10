@@ -1,0 +1,23 @@
+Feature: Delete Chat 
+  Scenario: Unsuccessful deletion for unauthenticated user
+    Given I am not logged in 
+    When I request to delete a chat 
+    Then I am returned an error 
+    And the chat is not deleted 
+  Scenario: Unsuccessful deletion for incorrect user 
+    Given I am logged in 
+    When I request to delete a chat 
+    And the chat is owned by a different user 
+    Then I am returned an error 
+    And the chat is not deleted 
+  Scenario: Successful deletion for correct authenticated user 
+    Given I am logged in 
+    When I request to delete a chat 
+    And the chat is owned by my current user 
+    Then I should see a visual change 
+    And the full chat history is deleted
+  Scenario: Successful deletion of a specific message branch
+    Given I am logged in
+    When I delete a specific message within a chat
+    Then that message and all its subsequent replies (children) are removed
+    And the rest of the chat history is preserved

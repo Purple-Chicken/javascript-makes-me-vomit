@@ -36,7 +36,9 @@ const onLoad = () => {
 
     const validate = () => {
       let isValid = true;
+
       if (passwordInput.value.length > 0 && passwordInput.value.length < 8) {
+
         if (passwordError) passwordError.textContent = 'Password is too weak (min 8 chars).';
         isValid = false;
       } else if (passwordError) {
@@ -51,8 +53,12 @@ const onLoad = () => {
       return isValid;
     };
 
-    passwordInput?.addEventListener('input', validate);
-    confirmInput?.addEventListener('input', validate);
+    if (typeof passwordInput?.addEventListener === 'function') {
+      passwordInput.addEventListener('input', validate);
+    }
+    if (typeof confirmInput?.addEventListener === 'function') {
+      confirmInput.addEventListener('input', validate);
+    }
 
     form?.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -60,7 +66,7 @@ const onLoad = () => {
       if (!validate()) return;
 
       const username = (document.getElementById('username') as HTMLInputElement).value;
-      const password = passwordInput.value;
+      const password = typeof passwordInput?.value === 'string' ? passwordInput.value : '';
 
       const response = await fetch('/api/users', {
         method: 'POST',
