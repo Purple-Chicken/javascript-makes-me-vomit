@@ -1,33 +1,32 @@
 // src/routes/signup.ts
 const html=`
-    <div class="box-container">
-<h1>Sign Up</h1>
-        <h2 class="text-center">Sign Up</h2>
-        <br>
+    <div class="box-container" style="display: flex; flex-direction: column;">
+        <h1>Sign Up</h1>
+        <div id="signup-success" style="display:none; text-align:center; padding: 12px 0;">
+          <p style="color: var(--accent, #4dff91); font-size: 0.95em; margin: 0 0 6px;">Account created successfully.</p>
+          <p style="opacity: 0.5; font-size: 0.78em; margin: 0;">Redirecting to login...</p>
+        </div>
         <form id="signupForm" class="signupForm">
             <div class="input-group">
-                <label for="username" class="label">Username</label>
-                <input type="text" id="username" class="input">
+                <div class="input-prompt"><input type="text" id="username" class="input" placeholder="username"></div>
                 <span class="error-message"></span>
             </div>
             <br>
             <div class="input-group">
-                <label for="password" class="label">Password</label>
-                <input type="password" id="password" class="input">
+                <div class="input-prompt"><input type="password" id="password" class="input" placeholder="password"></div>
                 <span id="password-error" class="error-message"></span>
             </div>
             <br>
             <div class="input-group">
-                <label for="password-confirm" class="label">Confirm Password</label>
-                <input type="password" id="password-confirm" class="input">
+                <div class="input-prompt"><input type="password" id="password-confirm" class="input" placeholder="confirm password"></div>
                 <span id="match-error" class="error-message"></span>
             </div>
             <br>
-            <button class="button" type="submit">Sign Up</button>
+            <button class="button" type="submit" style="width: 100%;">Sign Up</button>
         </form>
-        <p>Already have an account? <button class="button" onclick="window.location.hash='#/login'">Sign In</button> </p>
+        <p style="margin-top: auto; padding-top: 24px; font-size: 0.78em; opacity: 0.6; text-align: center;">Already have an account? <a href="#" onclick="window.location.hash='#/login'; return false;" style="color: var(--accent, #4dff91); text-decoration: none; opacity: 1;">Sign In</a></p>
     </div>
-`; 
+`;
 const onLoad = () => {
     const form = document.getElementById('signupForm') as HTMLFormElement;
     const passwordInput = document.getElementById('password') as HTMLInputElement;
@@ -37,17 +36,15 @@ const onLoad = () => {
 
     const validate = () => {
       let isValid = true;
-      const passwordValue = typeof passwordInput?.value === 'string' ? passwordInput.value : '';
-      const confirmValue = typeof confirmInput?.value === 'string' ? confirmInput.value : '';
-      // Strength check (8 characters minimum)
-      if (passwordValue.length > 0 && passwordValue.length < 8) {
+
+      if (passwordInput.value.length > 0 && passwordInput.value.length < 8) {
+
         if (passwordError) passwordError.textContent = 'Password is too weak (min 8 chars).';
         isValid = false;
       } else if (passwordError) {
         passwordError.textContent = '';
       }
-      // Match check
-      if (confirmValue.length > 0 && passwordValue !== confirmValue) {
+      if (confirmInput.value.length > 0 && passwordInput.value !== confirmInput.value) {
         if (matchError) matchError.textContent = 'Passwords do not match.';
         isValid = false;
       } else if (matchError) {
@@ -65,8 +62,8 @@ const onLoad = () => {
 
     form?.addEventListener('submit', async (e) => {
       e.preventDefault();
-    
-      if (!validate()) return;     
+
+      if (!validate()) return;
 
       const username = (document.getElementById('username') as HTMLInputElement).value;
       const password = typeof passwordInput?.value === 'string' ? passwordInput.value : '';
@@ -78,8 +75,10 @@ const onLoad = () => {
       });
 
       if (response.ok) {
-        alert('Account created! Please log in.');
-        window.location.hash = '#/login';
+        form.style.display = 'none';
+        document.getElementById('signup-success')!.style.display = 'block';
+        sessionStorage.setItem('prefill-username', username);
+        setTimeout(() => { window.location.hash = '#/login'; }, 2000);
       } else {
         let message = 'Signup failed';
         try {

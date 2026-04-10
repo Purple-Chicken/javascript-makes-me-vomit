@@ -15,11 +15,16 @@ You can have people work on a different version of a file, or even roll back to 
 - `src`: Source directory for our project 
     - `src/css`: Our CSS files go here 
     - `src/routes`: Routing info (update page without <C-r> refresh)
+    - `src/models`: Mongoose data models (User, Conversation)
+    - `src/config`: Passport authentication configuration
+- `backend/`: Docker Compose setup for MongoDB and Ollama
 - `static/`: where we put images 
 - `tests/`: Our Cucumber and Jasmine testing files go here
+- `features/`: Cucumber BDD feature files and step definitions
+- `server.ts`: Express API server — REST endpoints, Ollama chat proxy, auth
 - `package.json`: Packages needed to run the program 
 - `tsconfig.json`: Configuration of TS in our project 
-- `.env` , `.env.example`: For later use, sets up environment variables for when we include the database and service 
+- `.env` , `.env.example`: Environment variables for the database, JWT secret, and Ollama settings
 
 ## How do I contribute? 
 
@@ -34,13 +39,17 @@ Once you `cd` into the repository, you would need to make the following changes:
 - Copy `.env.example` into `.env`, making changes as needed 
 - Start `ollama` and database using 
 ```docker compose -f backend/docker-compose.yaml up -d```
+- Pull the Ollama model (first time only — this downloads ~2.6 GB):
+```docker exec ollama ollama pull qwen3:8b```
+  You can verify it's ready with: `docker exec ollama ollama list`
 - run `npm i` to install/update all the node modules
 - run `npm run dev` to run the development (testing) environment 
 
+> **Ollama configuration:** The chat feature calls the Ollama container at `http://127.0.0.1:11434` using the `qwen3:8b` model by default. You can change these in your `.env` file with `OLLAMA_URL` and `OLLAMA_MODEL`.
+
 Alternatively, you can run this handy dandy one-liner that does it all for you: 
 ```
- git clone https://github.com/Purple-Chicken/javascript-makes-me-vomit.git && cd javascript-makes-me-vomit && cp .env.example .env && docker compose -f backend/docker-compose.yaml up -d && npm i && npm run dev
-
+ git clone https://github.com/Purple-Chicken/javascript-makes-me-vomit.git && cd javascript-makes-me-vomit && cp .env.example .env && docker compose -f backend/docker-compose.yaml up -d && docker exec ollama ollama pull qwen3:8b && npm i && npm run dev
 ```
 
 
