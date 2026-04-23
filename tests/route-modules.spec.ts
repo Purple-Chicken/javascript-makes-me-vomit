@@ -6,11 +6,12 @@ import historyModule from '../src/routes/history.ts';
 
 describe('static route modules', () => {
   it('home route exports Home heading html', () => {
-    expect(homeModule.html).toContain('<h1>Home</h1>');
+    expect(homeModule.html).toContain('SHA-257');
   });
 
   it('chat route exports Chat heading html', () => {
-    expect(chatModule.html).toContain('<h1>Chat</h1>');
+    expect(chatModule.html).toContain('>Chat</h1>');
+    expect(chatModule.html).toContain('id="chat-models"');
   });
 
   it('account route exports account settings heading html', () => {

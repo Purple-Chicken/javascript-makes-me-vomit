@@ -4,6 +4,14 @@ const html = `
     <div class="chat-header">
       <h1 style="margin: 0; font-size: 1.5em;">Chat</h1>
     </div>
+    <div class="chat-controls">
+      <div class="chat-model-panel">
+        <div class="chat-model-label">Models</div>
+        <div id="chat-models" class="chat-model-options">
+          <span class="chat-model-hint">Loading available models...</span>
+        </div>
+      </div>
+    </div>
     <div id="chat-messages">
     </div>
     <form id="chatForm" class="chat-input-bar">
@@ -27,15 +35,86 @@ function escapeHtml(s: string) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+function escapeAttr(s: string) {
+  return escapeHtml(s).replace(/"/g, '&quot;');
+}
+
 const onLoad = () => {
   const form = document.getElementById('chatForm') as HTMLFormElement;
   const input = document.getElementById('chat-input') as HTMLTextAreaElement;
   const messages = document.getElementById('chat-messages') as HTMLDivElement;
+  const modelContainer = document.getElementById('chat-models') as HTMLDivElement | null;
   const sendBtn = document.getElementById('send-btn') as HTMLButtonElement;
   const stopBtn = document.getElementById('stop-btn') as HTMLButtonElement;
   let isGenerating = false;
   let abortController: AbortController | null = null;
   let currentUserMessage = '';  // track for stop persistence
+  let availableModels: string[] = [];
+
+  const copyBtnSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
+  const authHeaders = (includeJson = false) => {
+    const headers: Record<string, string> = {
+      'Authorization': `Bearer ${localStorage.getItem('token')}`,
+    };
+    if (includeJson) {
+      headers['Content-Type'] = 'application/json';
+    }
+    return headers;
+  };
+  const getMessageLabel = (message: { role: string; model?: string }) =>
+    message.role === 'user' ? 'You' : (message.model || 'LLM');
+  const renderModelOptions = (models: string[]) => {
+    availableModels = models;
+    if (!modelContainer) {
+      return;
+    }
+    if (!models.length) {
+      modelContainer.innerHTML = '<span class="chat-model-hint">Using the server default model.</span>';
+      return;
+    }
+    modelContainer.innerHTML = models.map((model, index) =>
+      `<label class="chat-model-option"><input type="checkbox" name="chat-model" value="${escapeAttr(model)}"${index === 0 ? ' checked' : ''}><span>${escapeHtml(model)}</span></label>`
+    ).join('');
+  };
+  const getSelectedModels = () => {
+    const selected = Array.from(
+      modelContainer?.querySelectorAll<HTMLInputElement>('input[name="chat-model"]:checked') || [],
+    ).map((checkbox) => checkbox.value);
+    return selected.length ? selected : availableModels.slice(0, 1);
+  };
+  const createAssistantBubble = (label: string) => {
+    const llmMessage = document.createElement('div');
+    llmMessage.className = 'chat-message llm';
+    llmMessage.innerHTML = `<button class="bubble-copy-btn" title="Copy">${copyBtnSvg}</button><div class="chat-bubble llm"><div class="bubble-role">${escapeHtml(label)}</div><div class="thinking-section" style="display:none;"><button class="thinking-toggle" type="button"><span class="spinner"></span> Thinking…</button><div class="thinking-content" style="display:none;"></div></div><div class="llm-spinner"><span class="spinner"></span></div><p class="llm-text"></p></div>`;
+    messages?.appendChild(llmMessage);
+
+    const llmBubble = llmMessage.querySelector('.chat-bubble') as HTMLElement;
+    const thinkingSection = llmBubble.querySelector('.thinking-section') as HTMLElement;
+    const thinkingToggle = llmBubble.querySelector('.thinking-toggle') as HTMLElement;
+    const thinkingContent = llmBubble.querySelector('.thinking-content') as HTMLElement;
+    const spinnerEl = llmBubble.querySelector('.llm-spinner') as HTMLElement;
+    const textEl = llmBubble.querySelector('.llm-text') as HTMLElement;
+
+    thinkingToggle?.addEventListener('click', () => {
+      const isOpen = thinkingContent.style.display !== 'none';
+      thinkingContent.style.display = isOpen ? 'none' : 'block';
+      thinkingToggle.classList.toggle('open', !isOpen);
+    });
+
+    return { label, thinkingSection, thinkingToggle, thinkingContent, spinnerEl, textEl };
+  };
+
+  void (async () => {
+    try {
+      const res = await fetch('/api/chat/models', { headers: authHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        renderModelOptions(Array.isArray(data.models) ? data.models.filter((model: unknown) => typeof model === 'string') : []);
+        return;
+      }
+    } catch {}
+    renderModelOptions([]);
+  })();
 
   // Load current conversation id from hash or start fresh
   let activeConversationId: string | null = new URLSearchParams(location.hash.split('?')[1] || '').get('id');
@@ -44,19 +123,19 @@ const onLoad = () => {
   if (activeConversationId) {
     (async () => {
       const res = await fetch(`/api/conversations/${encodeURIComponent(activeConversationId!)}`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        headers: authHeaders()
       });
       if (res.ok) {
         const data = await res.json();
         if (messages && Array.isArray(data.messages)) {
           const copyBtn = `<button class="bubble-copy-btn" title="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>`;
-          messages.innerHTML = data.messages.map((m: { role: string; content: string }) => {
+          messages.innerHTML = data.messages.map((m: { role: string; model?: string; content: string }) => {
             const cls = m.role === 'user' ? 'user' : 'llm';
-            const label = m.role === 'user' ? 'You' : 'LLM';
+            const label = getMessageLabel(m);
             const copy = copyBtn;
             const bubbleContent = m.role === 'user'
-              ? `<div class="chat-bubble ${cls}">${copy}<div class="bubble-role">${label}</div><p>${escapeHtml(m.content)}</p></div>`
-              : `${copy}<div class="chat-bubble ${cls}"><div class="bubble-role">${label}</div><p>${escapeHtml(m.content)}</p></div>`;
+              ? `<div class="chat-bubble ${cls}">${copy}<div class="bubble-role">${escapeHtml(label)}</div><p>${escapeHtml(m.content)}</p></div>`
+              : `${copy}<div class="chat-bubble ${cls}"><div class="bubble-role">${escapeHtml(label)}</div><p>${escapeHtml(m.content)}</p></div>`;
             return `<div class="chat-message ${cls}">${bubbleContent}</div>`;
           }).join('');
           messages.scrollTo(0, messages.scrollHeight);
@@ -163,6 +242,8 @@ const onLoad = () => {
     if (isGenerating) return;
     const text = input.value.trim();
     if (!text) return;
+    const selectedModels = getSelectedModels();
+    const usesMultiModel = selectedModels.length > 1;
 
     isGenerating = true;
     currentUserMessage = text;
@@ -177,8 +258,6 @@ const onLoad = () => {
     const hint = messages?.querySelector('.start-hint');
     if (hint) hint.remove();
 
-    const copyBtnSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
-
     // Append user bubble
     const userMessage = document.createElement('div');
     userMessage.className = 'chat-message user';
@@ -189,160 +268,163 @@ const onLoad = () => {
     sendBtn.style.display = 'none';
     messages?.scrollTo(0, messages.scrollHeight);
 
-    // Create LLM bubble with spinner
-    const llmMessage = document.createElement('div');
-    llmMessage.className = 'chat-message llm';
-    llmMessage.innerHTML = `<button class="bubble-copy-btn" title="Copy">${copyBtnSvg}</button><div class="chat-bubble llm"><div class="bubble-role">LLM</div><div class="thinking-section" style="display:none;"><button class="thinking-toggle" type="button"><span class="spinner"></span> Thinking…</button><div class="thinking-content" style="display:none;"></div></div><div class="llm-spinner"><span class="spinner"></span></div><p class="llm-text"></p></div>`;
-    messages?.appendChild(llmMessage);
-    const llmBubble = llmMessage.querySelector('.chat-bubble') as HTMLElement;
+    const assistantViews = (usesMultiModel ? selectedModels : [selectedModels[0] || 'LLM'])
+      .map((model) => createAssistantBubble(model));
     messages?.scrollTo(0, messages.scrollHeight);
-
-    const thinkingSection = llmBubble.querySelector('.thinking-section') as HTMLElement;
-    const thinkingToggle = llmBubble.querySelector('.thinking-toggle') as HTMLElement;
-    const thinkingContent = llmBubble.querySelector('.thinking-content') as HTMLElement;
-    const spinnerEl = llmBubble.querySelector('.llm-spinner') as HTMLElement;
-    const textEl = llmBubble.querySelector('.llm-text') as HTMLElement;
-
-    // Toggle thinking visibility
-    thinkingToggle?.addEventListener('click', () => {
-      const isOpen = thinkingContent.style.display !== 'none';
-      thinkingContent.style.display = isOpen ? 'none' : 'block';
-      thinkingToggle.classList.toggle('open', !isOpen);
-    });
+    const primaryAssistant = assistantViews[0];
+    const thinkingSection = primaryAssistant.thinkingSection;
+    const thinkingToggle = primaryAssistant.thinkingToggle;
+    const thinkingContent = primaryAssistant.thinkingContent;
+    const spinnerEl = primaryAssistant.spinnerEl;
+    const textEl = primaryAssistant.textEl;
 
     try {
-      const res = await fetch('/api/chat/stream', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({ message: text, conversationId: activeConversationId }),
-        signal: abortController!.signal
-      });
+      if (usesMultiModel) {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: authHeaders(true),
+          body: JSON.stringify({ message: text, conversationId: activeConversationId, models: selectedModels }),
+          signal: abortController!.signal,
+        });
+        if (!res.ok) {
+          throw new Error('Error getting response.');
+        }
 
-      if (!res.ok || !res.body) {
-        textEl.innerHTML = '<em>Error getting response.</em>';
-        spinnerEl.style.display = 'none';
-        isGenerating = false;
-        return;
-      }
+        const data = await res.json();
+        if (data.conversationId && !activeConversationId) {
+          activeConversationId = data.conversationId;
+          window.dispatchEvent(new CustomEvent('sidebar:refresh', { detail: { activeId: activeConversationId } }));
+        }
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let fullContent = '';
-      let inThink = false;
-      let thinkText = '';
-      let replyText = '';
+        const replies = Array.isArray(data.replies) ? data.replies : [];
+        const replyMap = new Map(replies.map((reply: { model: string; reply: string }) => [reply.model, reply.reply]));
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
+        assistantViews.forEach((view) => {
+          view.spinnerEl.style.display = 'none';
+          const reply = replyMap.get(view.label)?.trim();
+          view.textEl.textContent = reply || 'No response.';
+          view.thinkingSection.style.display = 'none';
+        });
+      } else {
+        const res = await fetch('/api/chat/stream', {
+          method: 'POST',
+          headers: authHeaders(true),
+          body: JSON.stringify({ message: text, conversationId: activeConversationId, models: selectedModels }),
+          signal: abortController!.signal,
+        });
 
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          try {
-            const chunk = JSON.parse(line);
+        if (!res.ok || !res.body) {
+          throw new Error('Error getting response.');
+        }
 
-            if (chunk.init) {
-              if (chunk.conversationId && !activeConversationId) {
-                activeConversationId = chunk.conversationId;
-                window.dispatchEvent(new CustomEvent('sidebar:refresh', { detail: { activeId: activeConversationId } }));
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let fullContent = '';
+        let inThink = false;
+        let thinkText = '';
+        let replyText = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const chunk = JSON.parse(line);
+
+              if (chunk.init) {
+                if (chunk.conversationId && !activeConversationId) {
+                  activeConversationId = chunk.conversationId;
+                  window.dispatchEvent(new CustomEvent('sidebar:refresh', { detail: { activeId: activeConversationId } }));
+                }
+                continue;
               }
-              continue;
-            }
 
-            if (chunk.done) {
-              if (chunk.conversationId && !activeConversationId) {
-                activeConversationId = chunk.conversationId;
-                window.dispatchEvent(new CustomEvent('sidebar:refresh', { detail: { activeId: activeConversationId } }));
+              if (chunk.done) {
+                if (chunk.conversationId && !activeConversationId) {
+                  activeConversationId = chunk.conversationId;
+                  window.dispatchEvent(new CustomEvent('sidebar:refresh', { detail: { activeId: activeConversationId } }));
+                }
+                continue;
               }
-              continue;
-            }
 
-            if (chunk.error) {
-              textEl.innerHTML = `<em>${escapeHtml(chunk.error)}</em>`;
-              continue;
-            }
+              if (chunk.error) {
+                textEl.innerHTML = `<em>${escapeHtml(chunk.error)}</em>`;
+                continue;
+              }
 
-            if (chunk.token) {
-              fullContent += chunk.token;
+              if (chunk.token) {
+                fullContent += chunk.token;
 
-              // Parse thinking vs reply content from accumulated text
-              // Re-parse full content each time for correct state
-              let tempThink = '';
-              let tempReply = '';
-              let tempInThink = false;
-              let i = 0;
-              while (i < fullContent.length) {
-                if (!tempInThink && fullContent.startsWith('<think>', i)) {
-                  tempInThink = true;
-                  i += 7;
-                } else if (tempInThink && fullContent.startsWith('</think>', i)) {
-                  tempInThink = false;
-                  i += 8;
-                } else {
-                  if (tempInThink) {
-                    tempThink += fullContent[i];
+                let tempThink = '';
+                let tempReply = '';
+                let tempInThink = false;
+                let i = 0;
+                while (i < fullContent.length) {
+                  if (!tempInThink && fullContent.startsWith('<think>', i)) {
+                    tempInThink = true;
+                    i += 7;
+                  } else if (tempInThink && fullContent.startsWith('</think>', i)) {
+                    tempInThink = false;
+                    i += 8;
                   } else {
-                    tempReply += fullContent[i];
+                    if (tempInThink) {
+                      tempThink += fullContent[i];
+                    } else {
+                      tempReply += fullContent[i];
+                    }
+                    i++;
                   }
-                  i++;
                 }
-              }
 
-              inThink = tempInThink;
-              thinkText = tempThink;
-              replyText = tempReply;
+                inThink = tempInThink;
+                thinkText = tempThink;
+                replyText = tempReply;
 
-              // Update thinking section
-              if (thinkText.trim()) {
-                thinkingSection.style.display = 'block';
-                thinkingContent.textContent = thinkText;
-                if (inThink) {
-                  thinkingToggle.innerHTML = '<span class="spinner"></span> Thinking…';
-                } else {
-                  thinkingToggle.textContent = '💭 Thought process';
+                if (thinkText.trim()) {
+                  thinkingSection.style.display = 'block';
+                  thinkingContent.textContent = thinkText;
+                  if (inThink) {
+                    thinkingToggle.innerHTML = '<span class="spinner"></span> Thinking…';
+                  } else {
+                    thinkingToggle.textContent = 'Thought process';
+                  }
                 }
-              }
 
-              // Update reply text
-              const trimmed = replyText.trim();
-              if (trimmed) {
-                spinnerEl.style.display = 'none';
-                textEl.textContent = trimmed;
-              }
+                const trimmed = replyText.trim();
+                if (trimmed) {
+                  spinnerEl.style.display = 'none';
+                  textEl.textContent = trimmed;
+                }
 
-              messages?.scrollTo(0, messages.scrollHeight);
-            }
-          } catch {}
+                messages?.scrollTo(0, messages.scrollHeight);
+              }
+            } catch {}
+          }
+        }
+
+        spinnerEl.style.display = 'none';
+        if (!replyText.trim() && !thinkText.trim()) {
+          textEl.innerHTML = '<em>No response.</em>';
         }
       }
 
-      // Final cleanup
-      spinnerEl.style.display = 'none';
-      if (!replyText.trim() && !thinkText.trim()) {
-        textEl.innerHTML = '<em>No response.</em>';
-      }
-
     } catch (err: any) {
-      spinnerEl.style.display = 'none';
       if (err.name === 'AbortError') {
-        // User stopped — show "Response stopped" and save to history
-        textEl.textContent = 'Response stopped';
-        if (thinkingSection) thinkingSection.style.display = 'none';
-        // Persist to server
+        assistantViews.forEach((view) => {
+          view.spinnerEl.style.display = 'none';
+          view.textEl.textContent = 'Response stopped';
+          view.thinkingSection.style.display = 'none';
+        });
         try {
           const stopRes = await fetch('/api/chat/stop', {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${localStorage.getItem('token')}`
-            },
+            headers: authHeaders(true),
             body: JSON.stringify({ message: currentUserMessage, conversationId: activeConversationId })
           });
           if (stopRes.ok) {
@@ -353,15 +435,18 @@ const onLoad = () => {
           }
         } catch {}
       } else {
-        textEl.innerHTML = '<em>Error getting response.</em>';
+        assistantViews.forEach((view) => {
+          view.spinnerEl.style.display = 'none';
+          view.textEl.innerHTML = '<em>Error getting response.</em>';
+        });
       }
+    } finally {
+      isGenerating = false;
+      abortController = null;
+      resizeInput();
+      stopBtn.style.display = 'none';
+      messages?.scrollTo(0, messages.scrollHeight);
     }
-
-    isGenerating = false;
-    abortController = null;
-    sendBtn.style.display = '';
-    stopBtn.style.display = 'none';
-    messages?.scrollTo(0, messages.scrollHeight);
   });
 
   // Stop button handler

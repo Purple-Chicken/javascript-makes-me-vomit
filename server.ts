@@ -7,6 +7,12 @@ import { configurePassport } from './src/config/passport';
 import { User } from './src/models/User';
 import { Conversation } from './src/models/Conversation';
 import bcrypt from 'bcryptjs';
+import {
+  buildAssistantMessages,
+  normalizeAssistantReply,
+  resolveRequestedModels,
+  type ModelReply,
+} from './src/lib/multiLlm';
 
 dotenv.config();
 
@@ -22,6 +28,10 @@ const MONGODB_URI =
   'mongodb://admin:admin@127.0.0.1:27017/mydb?authSource=admin';
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://127.0.0.1:11434';
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'qwen3:8b';
+const DEFAULT_CHAT_MODELS = resolveRequestedModels(
+  (process.env.OLLAMA_MODELS || OLLAMA_MODEL).split(','),
+  [OLLAMA_MODEL],
+);
 
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/sha257')
   .then(() => console.log(green + 'MongoDB Connected' + endc))
@@ -128,12 +138,12 @@ app.delete('/api/users/me', authenticateJWT, async (req, res) => {
 
 // ── Chat / Conversation endpoints ──
 
-async function queryOllama(messages: { role: string; content: string }[]): Promise<string> {
+async function queryOllama(model: string, messages: { role: string; content: string }[]): Promise<string> {
   const res = await fetch(`${OLLAMA_URL}/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: OLLAMA_MODEL,
+      model,
       messages,
       stream: false,
     }),
@@ -148,10 +158,26 @@ async function queryOllama(messages: { role: string; content: string }[]): Promi
   return data.message?.content?.trim() || '';
 }
 
+async function querySelectedModels(
+  messages: { role: string; content: string }[],
+  models: string[],
+): Promise<ModelReply[]> {
+  return await Promise.all(
+    models.map(async (model) => ({
+      model,
+      reply: normalizeAssistantReply(await queryOllama(model, messages)),
+    })),
+  );
+}
+
+app.get('/api/chat/models', authenticateJWT, (_req, res) => {
+  res.json({ models: DEFAULT_CHAT_MODELS });
+});
+
 // POST /api/chat  — send a message, get a random reply, persist both
 app.post('/api/chat', authenticateJWT, async (req, res) => {
   try {
-    const { message, conversationId } = req.body;
+    const { message, conversationId, models } = req.body;
     const userId = (req.user as any)._id;
 
     if (!message || typeof message !== 'string') {
@@ -176,13 +202,19 @@ app.post('/api/chat', authenticateJWT, async (req, res) => {
       { role: 'user', content: message },
     ];
 
-    const reply = (await queryOllama(ollamaMessages)).replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+    const selectedModels = resolveRequestedModels(models, DEFAULT_CHAT_MODELS);
+    const replies = await querySelectedModels(ollamaMessages, selectedModels);
 
     conversation.messages.push({ role: 'user', content: message });
-    conversation.messages.push({ role: 'assistant', content: reply });
+    conversation.messages.push(...buildAssistantMessages(replies));
     await conversation.save();
 
-    res.json({ reply, conversationId: conversation._id });
+    res.json({
+      reply: replies[0]?.reply || '',
+      replies,
+      models: selectedModels,
+      conversationId: conversation._id,
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Chat failed' });
   }
@@ -192,7 +224,7 @@ app.post('/api/chat', authenticateJWT, async (req, res) => {
 app.post('/api/chat/stream', authenticateJWT, async (req, res) => {
   let conversation: any;
   try {
-    const { message, conversationId } = req.body;
+    const { message, conversationId, models } = req.body;
     const userId = (req.user as any)._id;
 
     if (!message || typeof message !== 'string') {
@@ -214,6 +246,8 @@ app.post('/api/chat/stream', authenticateJWT, async (req, res) => {
       ...conversation.messages.map((m: any) => ({ role: m.role, content: m.content })),
       { role: 'user', content: message },
     ];
+    const selectedModels = resolveRequestedModels(models, DEFAULT_CHAT_MODELS);
+    const streamModel = selectedModels[0] || OLLAMA_MODEL;
 
     // Track client disconnect to abort Ollama and skip saving
     let clientDisconnected = false;
@@ -235,7 +269,7 @@ app.post('/api/chat/stream', authenticateJWT, async (req, res) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: OLLAMA_MODEL,
+        model: streamModel,
         messages: ollamaMessages,
         stream: true,
       }),
@@ -301,7 +335,7 @@ app.post('/api/chat/stream', authenticateJWT, async (req, res) => {
       const reply = fullContent.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
 
       conversation.messages.push({ role: 'user', content: message });
-      conversation.messages.push({ role: 'assistant', content: reply });
+      conversation.messages.push({ role: 'assistant', model: streamModel, content: reply });
       await conversation.save();
 
       res.write(JSON.stringify({ done: true, conversationId: conversation._id }) + '\n');

@@ -223,12 +223,12 @@ async function loadSidebarChats(activeId?: string) {
   }
 }
 
-window.addEventListener('sidebar:refresh', (e: Event) => {
-  const activeId = (e as CustomEvent).detail?.activeId;
-  loadSidebarChats(activeId);
-});
-
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+  window.addEventListener('sidebar:refresh', (e: Event) => {
+    const activeId = (e as CustomEvent).detail?.activeId;
+    loadSidebarChats(activeId);
+  });
+
   // Global theme applicator — called from account page and on load
   (window as any).__applyTheme = (prefs: { matrixRain?: boolean; lightMode?: boolean; font?: string; themeColor?: string }) => {
     const body = document.body;
