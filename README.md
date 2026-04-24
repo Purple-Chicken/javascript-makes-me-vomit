@@ -39,17 +39,20 @@ Once you `cd` into the repository, you would need to make the following changes:
 - Copy `.env.example` into `.env`, making changes as needed 
 - Start `ollama` and database using 
 ```docker compose -f backend/docker-compose.yaml up -d```
-- Pull the Ollama model (first time only — this downloads ~2.6 GB):
-```docker exec ollama ollama pull qwen3:8b```
+- Pull the Ollama models used by the current multi-model chat UI (first time only):
+```docker exec ollama ollama pull qwen3.5:2b```
+```docker exec ollama ollama pull deepseek-r1:1.5b```
+```docker exec ollama ollama pull llama3.2:1b```
+```docker exec ollama ollama pull gemma3:1b```
   You can verify it's ready with: `docker exec ollama ollama list`
 - run `npm i` to install/update all the node modules
 - run `npm run dev` to run the development (testing) environment 
 
-> **Ollama configuration:** The chat feature calls the Ollama container at `http://127.0.0.1:11434` using the `qwen3:8b` model by default. You can change these in your `.env` file with `OLLAMA_URL` and `OLLAMA_MODEL`.
+> **Ollama configuration:** The chat feature calls the Ollama container at `http://127.0.0.1:11434`. `OLLAMA_MODEL` sets the default single-model / streamed reply model, and `OLLAMA_MODELS` sets the selectable models shown in the chat UI. The current recommended configuration is `OLLAMA_MODEL="qwen3.5:2b"` and `OLLAMA_MODELS="qwen3.5:2b,deepseek-r1:1.5b,llama3.2:1b,gemma3:1b"`.
 
 Alternatively, you can run this handy dandy one-liner that does it all for you: 
 ```
- git clone https://github.com/Purple-Chicken/javascript-makes-me-vomit.git && cd javascript-makes-me-vomit && cp .env.example .env && docker compose -f backend/docker-compose.yaml up -d && docker exec ollama ollama pull qwen3:8b && npm i && npm run dev
+ git clone https://github.com/Purple-Chicken/javascript-makes-me-vomit.git && cd javascript-makes-me-vomit && cp .env.example .env && docker compose -f backend/docker-compose.yaml up -d && docker exec ollama ollama pull qwen3.5:2b && docker exec ollama ollama pull deepseek-r1:1.5b && docker exec ollama ollama pull llama3.2:1b && docker exec ollama ollama pull gemma3:1b && npm i && npm run dev
 ```
 
 
