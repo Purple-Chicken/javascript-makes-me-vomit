@@ -33,6 +33,15 @@ export const resolveRequestedModels = (
   return requested.length ? requested : sanitizeModels(fallbackModels);
 };
 
+export const filterAvailableModels = (
+  configuredModels: unknown,
+  installedModels: unknown,
+): string[] => {
+  const configured = sanitizeModels(configuredModels);
+  const installed = new Set(sanitizeModels(installedModels));
+  return configured.filter((model) => installed.has(model));
+};
+
 export const normalizeAssistantReply = (reply: string): string =>
   reply.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
 

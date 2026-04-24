@@ -48,7 +48,9 @@ Once you `cd` into the repository, you would need to make the following changes:
 - run `npm i` to install/update all the node modules
 - run `npm run dev` to run the development (testing) environment 
 
-> **Ollama configuration:** The chat feature calls the Ollama container at `http://127.0.0.1:11434`. `OLLAMA_MODEL` sets the default single-model reply, and `OLLAMA_MODELS` sets the selectable models shown in the chat UI in that same order. The `Ask all` dropdown option uses that same configured list. The recommended configuration is `OLLAMA_MODEL="qwen3.5:2b"` and `OLLAMA_MODELS="qwen3.5:2b,deepseek-r1:1.5b,llama3.2:1b,gemma3:1b"`.
+> **Ollama configuration:** The chat feature calls the Ollama container at `http://localhost:11434`. `OLLAMA_MODEL` sets the default single-model reply, and `OLLAMA_MODELS` sets the selectable models shown in the chat UI in that same order. The `Ask all` dropdown option uses that same configured list. The recommended configuration is `OLLAMA_MODEL="qwen3.5:2b"` and `OLLAMA_MODELS="qwen3.5:2b,deepseek-r1:1.5b,llama3.2:1b,gemma3:1b"`.
+
+> On Windows, `127.0.0.1:11434` can hit a separate native Ollama install instead of the Docker container. If the chat dropdown says no local models are available or you see the wrong model list, use `OLLAMA_URL="http://localhost:11434"` so the app reaches the Docker-published Ollama endpoint.
 
 > If you change `OLLAMA_MODELS`, also pull those same tags with `docker exec ollama ollama pull ...` so a fresh clone following the README gets the exact same dropdown options and working chat responses.
 

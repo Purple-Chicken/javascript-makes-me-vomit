@@ -2,6 +2,7 @@
 
 import {
   buildAssistantMessages,
+  filterAvailableModels,
   normalizeAssistantReply,
   resolveRequestedModels,
 } from '../src/lib/multiLlm.ts';
@@ -20,6 +21,15 @@ describe('multi-LLM helpers', () => {
     );
 
     expect(resolved).toEqual(['qwen3:8b', 'mistral:7b', 'llama3.2:3b']);
+  });
+
+  it('keeps only installed configured models while preserving env order', () => {
+    const available = filterAvailableModels(
+      ['qwen3.5:2b', 'deepseek-r1:1.5b', 'llama3.2:1b', 'gemma3:1b'],
+      ['llama3.2:1b', 'qwen3.5:2b', 'mistral:7b'],
+    );
+
+    expect(available).toEqual(['qwen3.5:2b', 'llama3.2:1b']);
   });
 
   it('removes think tags from assistant replies', () => {

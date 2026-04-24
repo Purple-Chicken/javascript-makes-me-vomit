@@ -9,6 +9,7 @@ import { Conversation } from './src/models/Conversation';
 import bcrypt from 'bcryptjs';
 import { createChatRunRegistry } from './src/lib/chatRunRegistry';
 import {
+  filterAvailableModels,
   normalizeAssistantReply,
   resolveRequestedModels,
 } from './src/lib/multiLlm';
@@ -25,7 +26,7 @@ const PORT = Number(process.env.PORT || '5000');
 const MONGODB_URI =
   process.env.MONGODB_URI ||
   'mongodb://admin:admin@127.0.0.1:27017/mydb?authSource=admin';
-const OLLAMA_URL = process.env.OLLAMA_URL || 'http://127.0.0.1:11434';
+const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'qwen3:8b';
 const DEFAULT_CHAT_MODELS = resolveRequestedModels(
   (process.env.OLLAMA_MODELS || OLLAMA_MODEL).split(','),
@@ -167,14 +168,10 @@ async function fetchLocalOllamaModels(): Promise<string[]> {
     }
 
     const data = await res.json() as { models?: Array<{ name?: string }> };
-    const installedModels = new Set(
-      resolveRequestedModels(
-        (data.models || []).map((model) => model.name || ''),
-        DEFAULT_CHAT_MODELS,
-      ),
+    return filterAvailableModels(
+      DEFAULT_CHAT_MODELS,
+      (data.models || []).map((model) => model.name || ''),
     );
-    const configuredModels = DEFAULT_CHAT_MODELS.filter((model) => installedModels.has(model));
-    return configuredModels.length ? configuredModels : DEFAULT_CHAT_MODELS;
   } catch {
     return DEFAULT_CHAT_MODELS;
   }
@@ -320,14 +317,6 @@ const runConversationInBackground = async (
   );
 };
 
-const resolveChatModels = async (requestedModel: string) => {
-  if (requestedModel !== ASK_ALL_VALUE) {
-    return [requestedModel];
-  }
-
-  return await fetchLocalOllamaModels();
-};
-
 app.get('/api/chat/models', authenticateJWT, async (req, res) => {
   const userId = String((req.user as any)._id);
   const models = await fetchLocalOllamaModels();
@@ -348,7 +337,11 @@ app.post('/api/chat', authenticateJWT, async (req, res) => {
       return res.status(400).json({ error: 'model is required' });
     }
 
-    const requestedModels = await resolveChatModels(model);
+    const availableModels = await fetchLocalOllamaModels();
+    const requestedModels = model === ASK_ALL_VALUE ? availableModels : [model];
+    if (model !== ASK_ALL_VALUE && !availableModels.includes(model)) {
+      return res.status(400).json({ error: `Model '${model}' is not available from the configured Ollama endpoint` });
+    }
     if (model === ASK_ALL_VALUE && requestedModels.length < 2) {
       return res.status(400).json({ error: 'Ask all requires at least two local models' });
     }

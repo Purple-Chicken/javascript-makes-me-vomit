@@ -77,7 +77,9 @@ const onLoad = () => {
   let activeConversationId: string | null = hashParams.get('id');
   let selectedModel = hashParams.get('model') || '';
   let currentStatus: ConversationStatus = 'idle';
+  let currentLastError: string | null = null;
   let modelStates: ModelState[] = [];
+  let availableModelNames: string[] = [];
   let pollTimer: number | null = null;
   let renderedSignature = '';
 
@@ -147,6 +149,8 @@ const onLoad = () => {
     Boolean(state?.busy && state.conversationId && state.conversationId !== activeConversationId);
   const isAskAllSelected = () => selectedModel === ASK_ALL_VALUE;
   const isAskAllUnavailable = () => modelStates.length < 2 || modelStates.some((state) => isBusyElsewhere(state));
+  const isSelectedModelUnavailable = () =>
+    Boolean(selectedModel && selectedModel !== ASK_ALL_VALUE && !availableModelNames.includes(selectedModel));
 
   const updateHashForConversation = () => {
     if (!activeConversationId || !window.history?.replaceState) {
@@ -164,16 +168,19 @@ const onLoad = () => {
     const runningHere = currentStatus === 'running';
     const awaitingSelection = currentStatus === 'awaiting-selection';
     const askAllUnavailable = isAskAllSelected() && isAskAllUnavailable();
+    const selectedModelUnavailable = isSelectedModelUnavailable();
     const hasModel = Boolean(selectedModel);
 
     modelSelect.disabled = !modelStates.length || runningHere || awaitingSelection;
-    input.disabled = !hasModel || lockedElsewhere || askAllUnavailable || runningHere || awaitingSelection;
+    input.disabled = !hasModel || lockedElsewhere || askAllUnavailable || selectedModelUnavailable || runningHere || awaitingSelection;
     sendBtn.style.display = (!input.disabled && input.value.trim()) ? '' : 'none';
 
     if (!hasModel) {
       setBanner('No local Ollama models are available.', 'warning');
     } else if (awaitingSelection) {
       setBanner('Choose one response to save it as the main reply for this chat.', 'info');
+    } else if (selectedModelUnavailable) {
+      setBanner(currentLastError || `${selectedModel} is not available from the configured Ollama endpoint.`, 'warning');
     } else if (askAllUnavailable) {
       setBanner('Ask all is only available when at least two models are idle.', 'warning');
     } else if (runningHere) {
@@ -181,7 +188,7 @@ const onLoad = () => {
     } else if (lockedElsewhere) {
       setBanner(`${selectedModel} is already generating in another chat. Start a new chat with a different model.`, 'warning');
     } else if (currentStatus === 'error') {
-      setBanner('The last response failed. You can try again once this model is available.', 'warning');
+      setBanner(currentLastError || 'The last response failed. You can try again once this model is available.', 'warning');
     } else {
       setBanner('');
     }
@@ -257,8 +264,11 @@ const onLoad = () => {
   };
 
   const renderModelSelect = () => {
+    const selectedModelUnavailable = Boolean(
+      selectedModel && selectedModel !== ASK_ALL_VALUE && !availableModelNames.includes(selectedModel),
+    );
     let nextStates = [...modelStates];
-    if (selectedModel && selectedModel !== ASK_ALL_VALUE && !nextStates.some((state) => state.name === selectedModel)) {
+    if (selectedModelUnavailable) {
       nextStates = [{
         name: selectedModel,
         busy: currentStatus === 'running',
@@ -284,8 +294,9 @@ const onLoad = () => {
 
     const askAllOption = `<option value="${ASK_ALL_VALUE}"${askAllUnavailable ? ' disabled' : ''}>Ask all models</option>`;
     modelSelect.innerHTML = askAllOption + modelStates.map((state) => {
-      const disabled = isBusyElsewhere(state) && state.name !== selectedModel;
-      const label = disabled ? `${state.name} (busy)` : state.name;
+      const unavailable = selectedModelUnavailable && state.name === selectedModel;
+      const disabled = unavailable || (isBusyElsewhere(state) && state.name !== selectedModel);
+      const label = unavailable ? `${state.name} (unavailable)` : (disabled ? `${state.name} (busy)` : state.name);
       return `<option value="${escapeAttr(state.name)}"${disabled ? ' disabled' : ''}>${escapeHtml(label)}</option>`;
     }).join('');
     modelSelect.value = preferredModel;
@@ -299,6 +310,7 @@ const onLoad = () => {
       if (res.ok) {
         const data = await res.json();
         modelStates = normalizeModelStates(data.models);
+        availableModelNames = modelStates.map((state) => state.name);
       }
     } catch {}
     renderModelSelect();
@@ -307,6 +319,7 @@ const onLoad = () => {
   const fetchConversation = async () => {
     if (!activeConversationId) {
       currentStatus = 'idle';
+      currentLastError = null;
       renderedSignature = '';
       renderMessages({ messages: [] });
       updateComposerState();
@@ -324,6 +337,7 @@ const onLoad = () => {
     }
 
     const data = await res.json() as ConversationData;
+    currentLastError = typeof data.lastError === 'string' && data.lastError ? data.lastError : null;
     if (data.pendingTurn?.mode === 'ask-all') {
       selectedModel = ASK_ALL_VALUE;
     }
@@ -472,7 +486,9 @@ const onLoad = () => {
     }
 
     if (!res.ok) {
-      setBanner('Error starting the chat.', 'warning');
+      const data = await res.json().catch(() => ({} as { error?: string }));
+      currentLastError = typeof data.error === 'string' ? data.error : null;
+      setBanner(currentLastError || 'Error starting the chat.', 'warning');
       updateComposerState();
       return;
     }
@@ -481,6 +497,7 @@ const onLoad = () => {
     activeConversationId = data.conversationId || activeConversationId;
     selectedModel = data.mode === 'ask-all' ? ASK_ALL_VALUE : (data.model || selectedModel);
     currentStatus = data.status || 'running';
+    currentLastError = null;
     input.value = '';
     input.style.height = 'auto';
     renderedSignature = '';
