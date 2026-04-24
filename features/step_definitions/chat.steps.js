@@ -20,7 +20,7 @@ Given('I have no previous chats', () => {
 });
 
 Given('I am currently not on the {string} page', (page) => {
-  globalThis.location.hash = `#/not-${page}`;
+  window.location.hash = `#/not-${page}`;
 });
 
 Given('I have {int} existing persistent conversations', (count) => {
@@ -70,7 +70,7 @@ When('I navigate to a different chat or page', () => {
   if (currentChat.isTemporary) {
     currentChat = { id: null, messages: [], isTemporary: false };
   }
-  globalThis.location.hash = '#/other-page';
+  window.location.hash = '#/other-page';
 });
 
 When('I refresh the browser tab', () => {

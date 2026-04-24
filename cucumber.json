@@ -1,6 +1,6 @@
 {
   "default": {
-    "require": ["features/step_definitions/**/*.js"],
+    "require": ["features/support/env.ts", "features/step_definitions/**/*.js"],
     "paths": ["features/**/*.feature"],
     "format": ["progress"]
   }

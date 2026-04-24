@@ -147,6 +147,20 @@ const html=`
   </div>
 </div>
 `; 
+
+    let selectedPic = 0;
+    let selectedColor = 'green';
+    let selectedFont = 'ibm-plex';
+
+    function updateFontSelection(font: string) {
+        // Treat legacy 'neo-tech' value as the new default 'ibm-plex'
+        const normalized = font === 'neo-tech' ? 'ibm-plex' : font;
+        selectedFont = normalized;
+        document.querySelectorAll('.font-option').forEach(btn => {
+            btn.classList.toggle('selected', (btn as HTMLElement).dataset.font === normalized);
+        });
+    }
+
 const onLoad = () => {
     const pwdForm = document.getElementById('changepwdForm') as HTMLFormElement;
     const usernameForm = document.getElementById('changeUsernameForm') as HTMLFormElement;
@@ -168,18 +182,6 @@ const onLoad = () => {
     const matrixRainCheckbox = document.getElementById('pref-matrix-rain') as HTMLInputElement;
     const lightModeCheckbox = document.getElementById('pref-light-mode') as HTMLInputElement;
 
-    let selectedPic = 0;
-    let selectedColor = 'green';
-    let selectedFont = 'ibm-plex';
-
-    function updateFontSelection(font: string) {
-        // Treat legacy 'neo-tech' value as the new default 'ibm-plex'
-        const normalized = font === 'neo-tech' ? 'ibm-plex' : font;
-        selectedFont = normalized;
-        document.querySelectorAll('.font-option').forEach(btn => {
-            btn.classList.toggle('selected', (btn as HTMLElement).dataset.font === normalized);
-        });
-    }
 
     const authHeaders = () => ({
         'Content-Type': 'application/json',
