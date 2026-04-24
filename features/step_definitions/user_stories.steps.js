@@ -35,6 +35,9 @@ const installDom = () => {
   };
 
   globalThis.document = {
+    body: {
+      dataset: {}
+    },
     getElementById: (id) => {
       if (id === 'app') return app;
       if (id === 'loginForm') return makeForm('login');

@@ -9,7 +9,8 @@ let currentChat = {
   model: 'default',
   expiresAt: null
 };
-
+let isStreaming = false;
+let lastResponseElement = null;
 let sidebarChats = [];
 let appHTML = ''; // Mocking the #app container content
 
@@ -47,6 +48,10 @@ Given('I am in an active {string} session', (mode) => {
 Given('a persistent chat was set to expire at {string}', (time) => {
   currentChat.expiresAt = time;
 });
+Given('I have an active conversation', () => {
+  currentChat.id = 'active-123';
+  currentChat.messages = [{ role: 'user', content: 'Hello' }];
+});
 
 // --- When Steps ---
 
@@ -59,6 +64,18 @@ When('press {string}', (key) => {
   currentChat.messages.push({ role: 'user', content: 'New Message' });
 });
 
+When('the server begins streaming the response chunks', async () => {
+  isStreaming = true;
+  currentChat.messages.push({ role: 'assistant', content: '' });
+});
+
+When('the LLM generates a response with {string}', (content) => {
+  currentChat.messages.push({ role: 'assistant', content });
+});
+
+When('the LLM generates a response with a GFM table:', (tableMarkdown) => {
+  currentChat.messages.push({ role: 'assistant', content: tableMarkdown, type: 'table' });
+});
 When('I select {string}', (option) => {
   if (option === 'temporary chat') {
     currentChat.isTemporary = true;
@@ -107,6 +124,17 @@ Then('the chat interface should be reset to empty', () => {
   if (currentChat.id !== null) throw new Error('Chat interface was not reset');
 });
 
+Then('the message should be displayed with a {string} element', (elType) => {
+  const lastMsg = currentChat.messages[currentChat.messages.length - 1];
+  if (elType === 'table' && !lastMsg.content.includes('|')) throw new Error('Table render fail');
+});
+
+Then('the table should have {int} {string} row and {int} {string} rows', (hCount, hType, bCount, bType) => {
+  const lastMsg = currentChat.messages[currentChat.messages.length - 1];
+  const lines = lastMsg.content.trim().split('\n').filter(l => !l.includes('---'));
+  if (lines.length !== (hCount + bCount)) throw new Error('Table row mismatch');
+});
+
 Then('the chat is saved to the database with a deletion timestamp', () => {
   if (!currentChat.expiresAt || currentChat.isTemporary) {
     throw new Error('Chat was not saved with correct persistence/expiration metadata');
@@ -119,12 +147,6 @@ Then('I should see a {string} message', (text) => {
 });
 
 // --- Markdown Rendering Steps ---
-
-Then('the message should be rendered with the correct {string}', (element) => {
-  // Logic to verify that Markdown string was converted to HTML tag
-  const lastMsg = currentChat.messages[currentChat.messages.length - 1].content;
-  // This would typically involve a regex check or a DOM parser check
-});
 
 Then('the link {string} attribute should be {string}', (attr, value) => {
   // Verification logic for <a href="..."> tags
