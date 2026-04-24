@@ -36,15 +36,30 @@ const installDom = () => {
 
   globalThis.document = {
     body: {
-      dataset: {}
+      dataset: {}, 
+      classList: { add: () => {}, remove: () => {}, contains: () => false }
     },
+    querySelectorAll: () => [], 
+    querySelector: (selector) => ({ 
+      addEventListener: () => {}, 
+      appendChild: () => {}, 
+      style: {},
+      textContent: '',
+      closest: () => null 
+    }),
     getElementById: (id) => {
       if (id === 'app') return app;
       if (id === 'loginForm') return makeForm('login');
       if (id === 'signupForm') return makeForm('signup');
       if (id === 'username') return inputs.username;
       if (id === 'password') return inputs.password;
-      return null;
+      return { 
+        addEventListener: () => {}, 
+        appendChild: () => {}, 
+        style: {}, 
+        querySelector: () => null,
+        textContent: ''
+      };
     },
     querySelector: (selector) => {
       if (selector === 'nav') return navElement;

@@ -87,9 +87,9 @@ describe('puppeteer UI smoke test', () => {
     const homeText = await page.$eval('#app h1', (el) =>
       el.textContent?.trim(),
     );
-    expect(homeText).toBe('Home');
+    expect(homeText).toBe('SHA-257');
 
-    await page.click('nav a[href="#/login"]');
+    await page.click('nav a[data-link="/login"]');
     await pause(750);
     await page.waitForFunction(
       () => document.querySelector('#app h1')?.textContent?.trim() === 'Login',

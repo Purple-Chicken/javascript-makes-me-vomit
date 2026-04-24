@@ -89,6 +89,7 @@ export async function router(app: AppLike, path: string, modules: Record<string,
     const isLoggedIn = await checkAuth();
     if (!isLoggedIn) {
       window.location.hash = '#/login';
+      handleRoute();
       return;
     }
   }
@@ -307,7 +308,6 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       localStorage.removeItem('userProfilePic');
       localStorage.removeItem('cachedUsername');
       window.location.hash = '#/login';
-      handleRoute();
     });
 
     settingsLink?.addEventListener('click', () => {
@@ -323,7 +323,6 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     if (location.hash.startsWith('#/chat')) {
       location.hash = '#/chat';
       // hashchange won't fire if hash is identical, so manually trigger
-      handleRoute();
     } else {
       location.hash = '#/chat';
     }

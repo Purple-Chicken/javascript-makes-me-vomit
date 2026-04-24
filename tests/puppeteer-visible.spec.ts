@@ -87,7 +87,7 @@ describe('puppeteer visible browser test', () => {
     const homeText = await page.$eval('#app h1', (el) =>
       el.textContent?.trim(),
     );
-    expect(homeText).toBe('Home');
+    expect(homeText).toBe('SHA-257');
     await pause(1250);
   });
 });

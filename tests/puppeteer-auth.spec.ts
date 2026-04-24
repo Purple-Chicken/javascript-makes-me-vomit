@@ -163,6 +163,7 @@ describe('puppeteer signup/login flow', () => {
       () => document.querySelector('#app h1')?.textContent?.trim() === 'Login',
     );
 
+      /*
     await page.waitForFunction(
       () =>
         Array.from(document.querySelectorAll('button')).some(
@@ -178,6 +179,9 @@ describe('puppeteer signup/login flow', () => {
       }
       signupButton.click();
     });
+    */
+    const signupSwitchButton = await page.waitForSelector('p button ::-p-text(Sign Up)');
+    await signupSwitchButton?.click();
     await pause(750);
     await page.waitForSelector('#signupForm');
 
@@ -191,7 +195,7 @@ describe('puppeteer signup/login flow', () => {
     page.once('dialog', async (dialog) => {
       await dialog.accept();
     });
-    await page.click('#signupForm button[type="submit"]');
+    await page.click('#signupForm button.button');
     await pause(1000);
 
     await page.waitForFunction(
@@ -202,7 +206,7 @@ describe('puppeteer signup/login flow', () => {
     await pause(500);
     await page.type('#password', password, { delay: typingDelayMs });
     await pause(500);
-    await page.click('button[type="submit"]');
+    await page.click('button.button');
     await pause(1000);
 
     await page.waitForFunction(
