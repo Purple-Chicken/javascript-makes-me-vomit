@@ -28,11 +28,15 @@ const html=`
 `;
 const onLoad = () => {
     const form = document.getElementById('loginForm') as HTMLFormElement;
+    const browserSessionStorage = typeof sessionStorage !== 'undefined' ? sessionStorage : null;
 
-    const prefill = sessionStorage.getItem('prefill-username');
+    const prefill = browserSessionStorage?.getItem('prefill-username');
     if (prefill) {
-      (document.getElementById('username') as HTMLInputElement).value = prefill;
-      sessionStorage.removeItem('prefill-username');
+      const usernameInput = document.getElementById('username') as HTMLInputElement | null;
+      if (usernameInput) {
+        usernameInput.value = prefill;
+      }
+      browserSessionStorage?.removeItem('prefill-username');
     }
 
     document.getElementById('forgot-password')?.addEventListener('click', (e) => {

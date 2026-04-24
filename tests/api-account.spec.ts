@@ -105,12 +105,12 @@ describe('user account API', () => {
       {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: newPassword }),
+        body: JSON.stringify({ oldPassword, newPassword }),
       },
       token,
     );
     expect(changePassword.status).toBe(200);
-    expect(changePassword.body.message).toContain('Password updated');
+    expect(changePassword.body.message).toContain('Account updated successfully');
 
     const loginWithOld = await apiRequest('/api/sessions', {
       method: 'POST',

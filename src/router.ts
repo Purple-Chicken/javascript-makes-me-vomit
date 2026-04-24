@@ -39,9 +39,15 @@ const TOPBAR_ICONS = [
 ];
 
 const renderPage = (app: AppLike, html: string): Promise<void> => {
-  const appElement = app as HTMLElement;
+  const appElement = app as Partial<HTMLElement>;
 
   return new Promise((resolve) => {
+    if (!appElement.style) {
+      app.innerHTML = html;
+      resolve();
+      return;
+    }
+
     // Fade out
     appElement.style.opacity = '0';
 
@@ -83,6 +89,9 @@ export async function router(app: AppLike, path: string, modules: Record<string,
     }
   }
 
+    const hadDocument = typeof document !== 'undefined';
+    const hadWindow = typeof window !== 'undefined';
+
   const targetModule = modules[path] || modules['404'];
 
   if (targetModule.protected) {
@@ -98,11 +107,18 @@ export async function router(app: AppLike, path: string, modules: Record<string,
   await renderPage(app, currentModule.html);
 
   if (typeof currentModule.onLoad === 'function') {
+      if ((hadDocument && typeof document === 'undefined') || (hadWindow && typeof window === 'undefined')) {
+      return;
+    }
     currentModule.onLoad();
   }
 }
 
 export async function handleRoute() {
+  if (typeof document === 'undefined' || typeof location === 'undefined') {
+    return;
+  }
+
   const app = document.getElementById('app');
   const rawPath = location.hash.slice(1) || '/';
   const path = rawPath.split('?')[0];
@@ -113,6 +129,10 @@ export async function handleRoute() {
   }
 
   await router(app, path, modules);
+
+  if (typeof document === 'undefined' || typeof localStorage === 'undefined') {
+    return;
+  }
 
   // Determine auth state for UI updates
   const isLoggedIn = await checkAuth();
@@ -162,12 +182,18 @@ export async function handleRoute() {
   }
 
   // Track current route on body for CSS targeting (e.g. light-mode backdrop)
-  document.body.dataset.route = path;
+  if (document.body) {
+    document.body.dataset.route = path;
+  }
 
   // Update nav active state
-  const navLinks = document.querySelectorAll('nav a');
+  const navLinks = typeof document.querySelectorAll === 'function'
+    ? document.querySelectorAll('nav a')
+    : [];
   navLinks.forEach(link => link.classList.remove('active'));
-  const activeLink = document.querySelector(`nav a[data-route="${path}"]`);
+  const activeLink = typeof document.querySelector === 'function'
+    ? document.querySelector(`nav a[data-route="${path}"]`)
+    : null;
   if (activeLink) {
     activeLink.classList.add('active');
   }
@@ -233,6 +259,10 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
   (window as any).__applyTheme = (prefs: { matrixRain?: boolean; lightMode?: boolean; font?: string; themeColor?: string }) => {
     const body = document.body;
     const canvas = document.getElementById('matrix-canvas') as HTMLCanvasElement | null;
+
+    if (!body) {
+      return;
+    }
 
     // Matrix rain
     if (canvas) canvas.style.display = prefs.matrixRain === false ? 'none' : '';

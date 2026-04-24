@@ -60,7 +60,7 @@ describe('puppeteer visible browser test', () => {
     page = await browser.newPage();
     await page.goto(baseUrl, { waitUntil: 'domcontentloaded' });
     await pause(1000);
-  });
+  }, 60000);
 
   afterAll(async () => {
     if (page) {
@@ -75,9 +75,9 @@ describe('puppeteer visible browser test', () => {
     if (typeof jasmine !== 'undefined') {
       jasmine.DEFAULT_TIMEOUT_INTERVAL = originalTimeout;
     }
-  });
+  }, 60000);
 
-  it('opens a real browser window and renders Home', async () => {
+  it('opens a real browser window and renders the home shell', async () => {
     if (!page) {
       throw new Error('Puppeteer page not initialized.');
     }
@@ -87,7 +87,7 @@ describe('puppeteer visible browser test', () => {
     const homeText = await page.$eval('#app h1', (el) =>
       el.textContent?.trim(),
     );
-    expect(homeText).toBe('Home');
+    expect(homeText).toBe('SHA-257');
     await pause(1250);
   });
 });

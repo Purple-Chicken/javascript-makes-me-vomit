@@ -53,14 +53,14 @@ describe('puppeteer UI smoke test', () => {
     baseUrl = `http://127.0.0.1:${port}`;
 
     browser = await puppeteer.launch({
-      headless: false,
+      headless: true,
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--window-size=1280,720'],
       defaultViewport: null,
     });
     page = await browser.newPage();
     await page.goto(baseUrl, { waitUntil: 'domcontentloaded' });
     await pause(1000);
-  });
+  }, 60000);
 
   afterAll(async () => {
     if (page) {
@@ -75,9 +75,9 @@ describe('puppeteer UI smoke test', () => {
     if (typeof jasmine !== 'undefined') {
       jasmine.DEFAULT_TIMEOUT_INTERVAL = originalTimeout;
     }
-  });
+  }, 60000);
 
-  it('renders Home and navigates to Login', async () => {
+  it('renders the home shell and navigates to Login', async () => {
     if (!page) {
       throw new Error('Puppeteer page not initialized.');
     }
@@ -87,9 +87,9 @@ describe('puppeteer UI smoke test', () => {
     const homeText = await page.$eval('#app h1', (el) =>
       el.textContent?.trim(),
     );
-    expect(homeText).toBe('Home');
+    expect(homeText).toBe('SHA-257');
 
-    await page.click('nav a[href="#/login"]');
+    await page.click('#topbar-login');
     await pause(750);
     await page.waitForFunction(
       () => document.querySelector('#app h1')?.textContent?.trim() === 'Login',

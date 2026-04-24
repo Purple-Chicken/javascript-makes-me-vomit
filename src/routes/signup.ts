@@ -29,6 +29,8 @@ const html=`
 `;
 const onLoad = () => {
     const form = document.getElementById('signupForm') as HTMLFormElement;
+  const successPanel = document.getElementById('signup-success') as HTMLElement | null;
+  const browserSessionStorage = typeof sessionStorage !== 'undefined' ? sessionStorage : null;
     const passwordInput = document.getElementById('password') as HTMLInputElement;
     const confirmInput = document.getElementById('password-confirm') as HTMLInputElement;
     const passwordError = document.getElementById('password-error');
@@ -69,9 +71,13 @@ const onLoad = () => {
       });
 
       if (response.ok) {
-        form.style.display = 'none';
-        document.getElementById('signup-success')!.style.display = 'block';
-        sessionStorage.setItem('prefill-username', username);
+        if ((form as any)?.style) {
+          (form as any).style.display = 'none';
+        }
+        if (successPanel?.style) {
+          successPanel.style.display = 'block';
+        }
+        browserSessionStorage?.setItem('prefill-username', username);
         setTimeout(() => { window.location.hash = '#/login'; }, 2000);
       } else {
         let message = 'Signup failed';

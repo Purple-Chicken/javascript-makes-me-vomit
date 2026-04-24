@@ -59,7 +59,6 @@ Alternatively, you can run this handy dandy one-liner that does it all for you:
  git clone https://github.com/Purple-Chicken/javascript-makes-me-vomit.git && cd javascript-makes-me-vomit && cp .env.example .env && docker compose -f backend/docker-compose.yaml up -d && docker exec ollama ollama pull qwen3.5:2b && docker exec ollama ollama pull deepseek-r1:1.5b && docker exec ollama ollama pull llama3.2:1b && docker exec ollama ollama pull gemma3:1b && npm i && npm run dev
 ```
 
-
  ## How do I use Git?
 
 

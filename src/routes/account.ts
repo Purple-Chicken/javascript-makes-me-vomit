@@ -172,15 +172,6 @@ const onLoad = () => {
     let selectedColor = 'green';
     let selectedFont = 'ibm-plex';
 
-    function updateFontSelection(font: string) {
-        // Treat legacy 'neo-tech' value as the new default 'ibm-plex'
-        const normalized = font === 'neo-tech' ? 'ibm-plex' : font;
-        selectedFont = normalized;
-        document.querySelectorAll('.font-option').forEach(btn => {
-            btn.classList.toggle('selected', (btn as HTMLElement).dataset.font === normalized);
-        });
-    }
-
     const authHeaders = () => ({
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${localStorage.getItem('token')}`
@@ -188,19 +179,23 @@ const onLoad = () => {
 
     // Fetch user details and fill fields
     (async () => {
+      try {
         const res = await fetch('/api/users/me', { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } });
-        if (res.ok) {
-            const user = await res.json();
-            if (usernameInput) usernameInput.value = user.username || '';
-            selectedPic = user.profilePic ?? 0;
-            updatePicSelection(selectedPic);
-            const prefs = user.preferences || {};
-            if (matrixRainCheckbox) matrixRainCheckbox.checked = prefs.matrixRain !== false;
-            if (lightModeCheckbox) lightModeCheckbox.checked = prefs.lightMode === true;
-            updateFontSelection(prefs.font || 'ibm-plex');
-            selectedColor = prefs.themeColor || 'green';
-            updateColorSelection(selectedColor);
+        if (res.ok && typeof res.json === 'function') {
+          const user = await res.json();
+          if (usernameInput) usernameInput.value = user.username || '';
+          selectedPic = user.profilePic ?? 0;
+          updatePicSelection(selectedPic);
+          const prefs = user.preferences || {};
+          if (matrixRainCheckbox) matrixRainCheckbox.checked = prefs.matrixRain !== false;
+          if (lightModeCheckbox) lightModeCheckbox.checked = prefs.lightMode === true;
+          selectedFont = updateFontSelection(prefs.font || 'ibm-plex');
+          selectedColor = prefs.themeColor || 'green';
+          updateColorSelection(selectedColor);
         }
+      } catch {
+        // Ignore bootstrap fetch failures; the form still renders and can be used.
+      }
     })();
 
     // Profile picture chooser
@@ -239,7 +234,7 @@ const onLoad = () => {
     document.getElementById('font-sampler')?.addEventListener('click', (e) => {
         const btn = (e.target as HTMLElement).closest('.font-option') as HTMLElement | null;
         if (!btn?.dataset.font) return;
-        updateFontSelection(btn.dataset.font);
+      selectedFont = updateFontSelection(btn.dataset.font);
         saveAndApplyAppearance();
     });
 
@@ -347,6 +342,14 @@ const onLoad = () => {
 function applyTheme(prefs: { matrixRain?: boolean; lightMode?: boolean; font?: string; themeColor?: string }) {
     localStorage.setItem('userPreferences', JSON.stringify(prefs));
     (window as any).__applyTheme?.(prefs);
+}
+
+function updateFontSelection(font: string) {
+  const normalized = font === 'neo-tech' ? 'ibm-plex' : font;
+  document.querySelectorAll('.font-option').forEach(btn => {
+    btn.classList.toggle('selected', (btn as HTMLElement).dataset.font === normalized);
+  });
+  return normalized;
 }
 
 function resetTheme() {

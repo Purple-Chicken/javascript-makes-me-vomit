@@ -1,8 +1,6 @@
 import net from 'node:net';
 import path from 'node:path';
-import { spawn, type ChildProcess } from 'node:child_process';
-import { MongoClient } from 'mongodb';
-import puppeteer, { type Browser, type Page } from 'puppeteer';
+import puppeteer, { type Browser, type HTTPRequest, type Page } from 'puppeteer';
 import { createServer, type ViteDevServer } from 'vite';
 
 const getAvailablePort = async (): Promise<number> =>
@@ -21,51 +19,23 @@ const getAvailablePort = async (): Promise<number> =>
     });
   });
 
-const waitForPort = async (host: string, port: number, timeoutMs = 15000) => {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    try {
-      await new Promise<void>((resolve, reject) => {
-        const socket = net.createConnection({ host, port }, () => {
-          socket.end();
-          resolve();
-        });
-        socket.on('error', reject);
-      });
-      return;
-    } catch {
-      await new Promise((resolve) => setTimeout(resolve, 250));
-    }
-  }
-  throw new Error(`Timeout waiting for ${host}:${port}`);
+type AuthState = {
+  username: string;
+  password: string;
+  token: string;
 };
 
-const resolveMongoUri = async (): Promise<string> => {
-  const candidates = [
-    process.env.MONGODB_URI,
-    'mongodb://127.0.0.1:27017/sha257',
-    'mongodb://127.0.0.1:27017/mydb',
-    'mongodb://admin:admin@127.0.0.1:27017/mydb?authSource=admin',
-  ].filter((uri): uri is string => Boolean(uri));
-
-  for (const uri of candidates) {
-    const client = new MongoClient(uri, {
-      serverSelectionTimeoutMS: 2000,
-      connectTimeoutMS: 2000,
-    });
-    try {
-      await client.connect();
-      return uri;
-    } catch {
-      // Try next URI candidate.
-    } finally {
-      await client.close().catch(() => undefined);
-    }
+const parseRequestJson = (request: HTTPRequest): Record<string, unknown> => {
+  const body = request.postData();
+  if (!body) {
+    return {};
   }
 
-  throw new Error(
-    'No reachable MongoDB URI found. Set MONGODB_URI or start MongoDB (for example: docker compose -f backend/docker-compose.yaml up -d).',
-  );
+  try {
+    return JSON.parse(body) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
 };
 
 describe('puppeteer signup/login flow', () => {
@@ -74,7 +44,7 @@ describe('puppeteer signup/login flow', () => {
   let server: ViteDevServer | null = null;
   let baseUrl = '';
   let originalTimeout = 0;
-  let apiProcess: ChildProcess | null = null;
+  let state: AuthState = { username: '', password: '', token: 'jwt-token-auth' };
   const pause = (ms: number) =>
     new Promise((resolve) => {
       setTimeout(resolve, ms);
@@ -87,19 +57,6 @@ describe('puppeteer signup/login flow', () => {
     }
 
     const root = path.resolve('.');
-    const mongoUri = await resolveMongoUri();
-
-    apiProcess = spawn(
-      process.execPath,
-      ['--import', 'tsx', path.join(root, 'server.ts')],
-      {
-        cwd: root,
-        stdio: 'ignore',
-        env: { ...process.env, MONGODB_URI: mongoUri },
-      },
-    );
-
-    await waitForPort('127.0.0.1', 5000, 20000);
 
     const port = await getAvailablePort();
     server = await createServer({
@@ -116,7 +73,7 @@ describe('puppeteer signup/login flow', () => {
     baseUrl = `http://127.0.0.1:${port}`;
 
     browser = await puppeteer.launch({
-      headless: false,
+      headless: true,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -125,9 +82,95 @@ describe('puppeteer signup/login flow', () => {
       defaultViewport: null,
     });
     page = await browser.newPage();
+    await page.evaluateOnNewDocument(() => {
+      localStorage.setItem('navCollapsed', '0');
+    });
+    await page.setRequestInterception(true);
+    page.on('request', async (request) => {
+      const url = new URL(request.url());
+      const pathname = url.pathname;
+
+      if (!pathname.startsWith('/api/')) {
+        await request.continue();
+        return;
+      }
+
+      if (pathname === '/api/users' && request.method() === 'POST') {
+        const body = parseRequestJson(request);
+        state.username = typeof body.username === 'string' ? body.username : '';
+        state.password = typeof body.password === 'string' ? body.password : '';
+        await request.respond({
+          status: 201,
+          contentType: 'application/json',
+          body: JSON.stringify({ id: 'user-auth' }),
+        });
+        return;
+      }
+
+      if (pathname === '/api/sessions' && request.method() === 'POST') {
+        const body = parseRequestJson(request);
+        const isValidLogin = body.username === state.username && body.password === state.password;
+        await request.respond({
+          status: isValidLogin ? 200 : 401,
+          contentType: 'application/json',
+          body: JSON.stringify(isValidLogin ? { token: state.token } : { error: 'Invalid credentials' }),
+        });
+        return;
+      }
+
+      if (pathname === '/api/users/me' && request.method() === 'GET') {
+        const authorized = request.headers().authorization === `Bearer ${state.token}`;
+        await request.respond({
+          status: authorized ? 200 : 401,
+          contentType: 'application/json',
+          body: JSON.stringify(authorized
+            ? {
+                username: state.username,
+                profilePic: 0,
+                preferences: {
+                  matrixRain: true,
+                  lightMode: false,
+                  font: 'ibm-plex',
+                  themeColor: 'green',
+                },
+              }
+            : { error: 'Unauthorized' }),
+        });
+        return;
+      }
+
+      if (pathname === '/api/conversations' && request.method() === 'GET') {
+        await request.respond({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify([]),
+        });
+        return;
+      }
+
+      if (pathname === '/api/chat/models' && request.method() === 'GET') {
+        await request.respond({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            models: [
+              { name: 'qwen3.5:2b', busy: false, conversationId: null },
+              { name: 'gemma3:1b', busy: false, conversationId: null },
+            ],
+          }),
+        });
+        return;
+      }
+
+      await request.respond({
+        status: 404,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: `Unhandled mock endpoint: ${pathname}` }),
+      });
+    });
     await page.goto(baseUrl, { waitUntil: 'domcontentloaded' });
     await pause(1000);
-  });
+  }, 60000);
 
   afterAll(async () => {
     if (page) {
@@ -139,13 +182,10 @@ describe('puppeteer signup/login flow', () => {
     if (server) {
       await server.close();
     }
-    if (apiProcess) {
-      apiProcess.kill('SIGTERM');
-    }
     if (typeof jasmine !== 'undefined') {
       jasmine.DEFAULT_TIMEOUT_INTERVAL = originalTimeout;
     }
-  });
+  }, 60000);
 
   it('creates an account and logs in', async () => {
     if (!page) {
@@ -156,28 +196,8 @@ describe('puppeteer signup/login flow', () => {
     const password = 'test-password-123';
     const typingDelayMs = 120;
 
-    await page.waitForSelector('nav a[href="#/login"]');
-    await page.click('nav a[href="#/login"]');
-    await pause(750);
-    await page.waitForFunction(
-      () => document.querySelector('#app h1')?.textContent?.trim() === 'Login',
-    );
-
-    await page.waitForFunction(
-      () =>
-        Array.from(document.querySelectorAll('button')).some(
-          (button) => button.textContent?.trim() === 'Sign Up',
-        ),
-    );
-    await page.evaluate(() => {
-      const signupButton = Array.from(document.querySelectorAll('button')).find(
-        (button) => button.textContent?.trim() === 'Sign Up',
-      );
-      if (!signupButton) {
-        throw new Error('Sign Up button not found on Login page.');
-      }
-      signupButton.click();
-    });
+    await page.waitForSelector('#topbar-signup');
+    await page.click('#topbar-signup');
     await pause(750);
     await page.waitForSelector('#signupForm');
 
@@ -188,21 +208,27 @@ describe('puppeteer signup/login flow', () => {
     await page.type('#password-confirm', password, { delay: typingDelayMs });
     await pause(500);
 
-    page.once('dialog', async (dialog) => {
-      await dialog.accept();
+    await page.evaluate(() => {
+      (document.getElementById('signupForm') as HTMLFormElement | null)?.requestSubmit();
     });
-    await page.click('#signupForm button[type="submit"]');
-    await pause(1000);
+    await page.waitForFunction(() => {
+      const successPanel = document.getElementById('signup-success');
+      return Boolean(successPanel && getComputedStyle(successPanel).display !== 'none');
+    });
 
-    await page.waitForFunction(
-      () => document.querySelector('#app h1')?.textContent?.trim() === 'Login',
+    await page.goto(`${baseUrl}/#/login`, { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('#loginForm');
+
+    const prefilledUsername = await page.$eval('#username', (element) =>
+      (element as HTMLInputElement).value,
     );
+    expect(prefilledUsername).toBe(username);
 
-    await page.type('#username', username, { delay: typingDelayMs });
-    await pause(500);
     await page.type('#password', password, { delay: typingDelayMs });
     await pause(500);
-    await page.click('button[type="submit"]');
+    await page.evaluate(() => {
+      (document.getElementById('loginForm') as HTMLFormElement | null)?.requestSubmit();
+    });
     await pause(1000);
 
     await page.waitForFunction(

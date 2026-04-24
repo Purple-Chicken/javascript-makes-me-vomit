@@ -44,16 +44,22 @@ const onLoad = () => {
 
   // Fetch all conversations for the current user
   (async () => {
-    const res = await fetch('/api/conversations', {
-      headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-    });
-    if (res.ok) {
-      allConversations = await res.json();
-      // Sort most recent first
-      allConversations.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-      if (list) renderList(list, allConversations);
-    } else if (list) {
-      list.innerHTML = '<p>Failed to load conversations.</p>';
+    try {
+      const res = await fetch('/api/conversations', {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      if (res.ok && typeof res.json === 'function') {
+        allConversations = await res.json();
+        // Sort most recent first
+        allConversations.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+        if (list) renderList(list, allConversations);
+      } else if (list) {
+        list.innerHTML = '<p>Failed to load conversations.</p>';
+      }
+    } catch {
+      if (list) {
+        list.innerHTML = '<p>Failed to load conversations.</p>';
+      }
     }
   })();
 
