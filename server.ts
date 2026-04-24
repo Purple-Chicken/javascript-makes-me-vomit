@@ -7,11 +7,10 @@ import { configurePassport } from './src/config/passport';
 import { User } from './src/models/User';
 import { Conversation } from './src/models/Conversation';
 import bcrypt from 'bcryptjs';
+import { createChatRunRegistry } from './src/lib/chatRunRegistry';
 import {
-  buildAssistantMessages,
   normalizeAssistantReply,
   resolveRequestedModels,
-  type ModelReply,
 } from './src/lib/multiLlm';
 
 dotenv.config();
@@ -32,6 +31,7 @@ const DEFAULT_CHAT_MODELS = resolveRequestedModels(
   (process.env.OLLAMA_MODELS || OLLAMA_MODEL).split(','),
   [OLLAMA_MODEL],
 );
+const chatRunRegistry = createChatRunRegistry();
 
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/sha257')
   .then(() => console.log(green + 'MongoDB Connected' + endc))
@@ -158,225 +158,131 @@ async function queryOllama(model: string, messages: { role: string; content: str
   return data.message?.content?.trim() || '';
 }
 
-async function querySelectedModels(
-  messages: { role: string; content: string }[],
-  models: string[],
-): Promise<ModelReply[]> {
-  return await Promise.all(
-    models.map(async (model) => ({
-      model,
-      reply: normalizeAssistantReply(await queryOllama(model, messages)),
-    })),
-  );
+async function fetchLocalOllamaModels(): Promise<string[]> {
+  try {
+    const res = await fetch(`${OLLAMA_URL}/api/tags`);
+    if (!res.ok) {
+      throw new Error(`Ollama tags error ${res.status}`);
+    }
+
+    const data = await res.json() as { models?: Array<{ name?: string }> };
+    const models = resolveRequestedModels(
+      (data.models || []).map((model) => model.name || ''),
+      DEFAULT_CHAT_MODELS,
+    );
+    return models.length ? models : DEFAULT_CHAT_MODELS;
+  } catch {
+    return DEFAULT_CHAT_MODELS;
+  }
 }
 
-app.get('/api/chat/models', authenticateJWT, (_req, res) => {
-  res.json({ models: DEFAULT_CHAT_MODELS });
+const createConversationTitle = (model: string, message: string) => {
+  const snippet = message.length > 48 ? `${message.slice(0, 48)}…` : message;
+  return `${model}: ${snippet}`;
+};
+
+const runConversationInBackground = async (
+  userId: string,
+  conversationId: string,
+  model: string,
+  messages: { role: string; content: string }[],
+) => {
+  try {
+    const reply = normalizeAssistantReply(await queryOllama(model, messages)) || 'No response.';
+    await Conversation.findOneAndUpdate(
+      { _id: conversationId, userId },
+      {
+        $push: { messages: { role: 'assistant', model, content: reply } },
+        $set: { status: 'completed', lastError: null },
+      },
+    );
+  } catch (err: any) {
+    await Conversation.findOneAndUpdate(
+      { _id: conversationId, userId },
+      {
+        $set: { status: 'error', lastError: err.message || 'Chat failed' },
+      },
+    );
+  } finally {
+    chatRunRegistry.release(userId, model);
+  }
+};
+
+app.get('/api/chat/models', authenticateJWT, async (req, res) => {
+  const userId = String((req.user as any)._id);
+  const models = await fetchLocalOllamaModels();
+  res.json({ models: chatRunRegistry.getModelStates(userId, models) });
 });
 
-// POST /api/chat  — send a message, get a random reply, persist both
+// POST /api/chat — start a single-model chat run that continues server-side
 app.post('/api/chat', authenticateJWT, async (req, res) => {
   try {
-    const { message, conversationId, models } = req.body;
-    const userId = (req.user as any)._id;
+    const { message, conversationId, model } = req.body;
+    const userId = String((req.user as any)._id);
 
     if (!message || typeof message !== 'string') {
       return res.status(400).json({ error: 'message is required' });
     }
 
-    let conversation;
+    if (!model || typeof model !== 'string') {
+      return res.status(400).json({ error: 'model is required' });
+    }
+
+    let conversation: any;
     if (conversationId) {
       conversation = await Conversation.findOne({ _id: conversationId, userId });
       if (!conversation) {
         return res.status(404).json({ error: 'Conversation not found' });
       }
+      if (conversation.model && conversation.model !== model) {
+        return res.status(400).json({ error: 'Conversation already belongs to a different model' });
+      }
+      if (conversation.status === 'running') {
+        return res.status(409).json({ error: 'Model is already busy', activeConversationId: String(conversation._id) });
+      }
     } else {
-      // Create a new conversation; use the first message (truncated) as the title
-      const title = message.length > 60 ? message.slice(0, 60) + '…' : message;
-      conversation = new Conversation({ userId, title, messages: [] });
+      conversation = new Conversation({
+        userId,
+        model,
+        title: createConversationTitle(model, message),
+        status: 'idle',
+        lastError: null,
+        messages: [],
+      });
     }
 
-    // Build the message history for Ollama (full conversation context)
+    const lock = chatRunRegistry.reserve({
+      userId,
+      model,
+      conversationId: String(conversation._id),
+    });
+    if (!lock.granted) {
+      return res.status(409).json({
+        error: 'Model is already busy',
+        activeConversationId: lock.activeConversationId,
+      });
+    }
+
     const ollamaMessages = [
       ...conversation.messages.map((m: any) => ({ role: m.role, content: m.content })),
       { role: 'user', content: message },
     ];
 
-    const selectedModels = resolveRequestedModels(models, DEFAULT_CHAT_MODELS);
-    const replies = await querySelectedModels(ollamaMessages, selectedModels);
-
     conversation.messages.push({ role: 'user', content: message });
-    conversation.messages.push(...buildAssistantMessages(replies));
+    conversation.model = conversation.model || model;
+    conversation.status = 'running';
+    conversation.lastError = null;
     await conversation.save();
 
-    res.json({
-      reply: replies[0]?.reply || '',
-      replies,
-      models: selectedModels,
+    void runConversationInBackground(userId, String(conversation._id), model, ollamaMessages);
+
+    res.status(202).json({
       conversationId: conversation._id,
+      model,
+      status: 'running',
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Chat failed' });
-  }
-});
-
-// POST /api/chat/stream — streamed version, sends NDJSON tokens + thinking
-app.post('/api/chat/stream', authenticateJWT, async (req, res) => {
-  let conversation: any;
-  try {
-    const { message, conversationId, models } = req.body;
-    const userId = (req.user as any)._id;
-
-    if (!message || typeof message !== 'string') {
-      return res.status(400).json({ error: 'message is required' });
-    }
-
-    if (conversationId) {
-      conversation = await Conversation.findOne({ _id: conversationId, userId });
-      if (!conversation) {
-        return res.status(404).json({ error: 'Conversation not found' });
-      }
-    } else {
-      const title = message.length > 60 ? message.slice(0, 60) + '…' : message;
-      conversation = new Conversation({ userId, title, messages: [] });
-      await conversation.save(); // Persist immediately so the sidebar can show it before streaming ends
-    }
-
-    const ollamaMessages = [
-      ...conversation.messages.map((m: any) => ({ role: m.role, content: m.content })),
-      { role: 'user', content: message },
-    ];
-    const selectedModels = resolveRequestedModels(models, DEFAULT_CHAT_MODELS);
-    const streamModel = selectedModels[0] || OLLAMA_MODEL;
-
-    // Track client disconnect to abort Ollama and skip saving
-    let clientDisconnected = false;
-    const abortController = new AbortController();
-    req.on('close', () => {
-      clientDisconnected = true;
-      abortController.abort();
-    });
-
-    // Stream from Ollama
-    res.setHeader('Content-Type', 'application/x-ndjson');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('X-Conversation-Id', String(conversation._id));
-    res.flushHeaders();
-    // Send init chunk immediately so the client knows the conversation ID before LLM responds
-    res.write(JSON.stringify({ init: true, conversationId: String(conversation._id) }) + '\n');
-
-    const ollamaRes = await fetch(`${OLLAMA_URL}/api/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: streamModel,
-        messages: ollamaMessages,
-        stream: true,
-      }),
-      signal: abortController.signal,
-    });
-
-    if (!ollamaRes.ok || !ollamaRes.body) {
-      // Remove the empty conversation that was pre-saved for the sidebar
-      if (conversation.messages.length === 0) {
-        await Conversation.findByIdAndDelete(conversation._id);
-      }
-      res.write(JSON.stringify({ error: 'Ollama error' }) + '\n');
-      res.end();
-      return;
-    }
-
-    let fullContent = '';
-    const reader = ollamaRes.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-
-    try {
-      while (true) {
-        if (clientDisconnected) break;
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          try {
-            const chunk = JSON.parse(line);
-            const token = chunk.message?.content || '';
-            if (token) {
-              fullContent += token;
-              if (!clientDisconnected) res.write(JSON.stringify({ token }) + '\n');
-            }
-            if (chunk.done) {
-              break;
-            }
-          } catch {}
-        }
-      }
-    } catch {
-      // AbortError from reader when client disconnects — expected
-    }
-
-    // Process any remaining buffer (only if client still connected)
-    if (!clientDisconnected && buffer.trim()) {
-      try {
-        const chunk = JSON.parse(buffer);
-        const token = chunk.message?.content || '';
-        if (token) {
-          fullContent += token;
-          res.write(JSON.stringify({ token }) + '\n');
-        }
-      } catch {}
-    }
-
-    // Only save if client is still connected (stop endpoint handles saves for aborted requests)
-    if (!clientDisconnected) {
-      const reply = fullContent.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
-
-      conversation.messages.push({ role: 'user', content: message });
-      conversation.messages.push({ role: 'assistant', model: streamModel, content: reply });
-      await conversation.save();
-
-      res.write(JSON.stringify({ done: true, conversationId: conversation._id }) + '\n');
-      res.end();
-    }
-  } catch (err: any) {
-    // Remove the empty conversation that was pre-saved for the sidebar
-    try { if (conversation && conversation.messages.length === 0) await Conversation.findByIdAndDelete(conversation._id); } catch {}
-    try { res.write(JSON.stringify({ error: err.message || 'Chat failed' }) + '\n'); } catch {}
-    try { res.end(); } catch {}
-  }
-});
-
-// POST /api/chat/stop — save user message + "Response stopped" when user cancels mid-stream
-app.post('/api/chat/stop', authenticateJWT, async (req, res) => {
-  try {
-    const { message, conversationId } = req.body;
-    const userId = (req.user as any)._id;
-
-    if (!message || typeof message !== 'string') {
-      return res.status(400).json({ error: 'message is required' });
-    }
-
-    let conversation;
-    if (conversationId) {
-      conversation = await Conversation.findOne({ _id: conversationId, userId });
-      if (!conversation) {
-        return res.status(404).json({ error: 'Conversation not found' });
-      }
-    } else {
-      const title = message.length > 60 ? message.slice(0, 60) + '…' : message;
-      conversation = new Conversation({ userId, title, messages: [] });
-    }
-
-    conversation.messages.push({ role: 'user', content: message });
-    conversation.messages.push({ role: 'assistant', content: 'Response stopped' });
-    await conversation.save();
-
-    res.json({ conversationId: conversation._id });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Stop failed' });
   }
 });
 
@@ -385,13 +291,16 @@ app.get('/api/conversations', authenticateJWT, async (req, res) => {
   try {
     const userId = (req.user as any)._id;
     const conversations = await Conversation.find({ userId })
-      .select('title createdAt updatedAt')
+      .select('title model status lastError createdAt updatedAt')
       .sort({ updatedAt: -1 })
       .lean();
 
     const result = conversations.map(c => ({
       id: c._id,
       title: c.title,
+      model: c.model,
+      status: c.status,
+      lastError: c.lastError,
       updatedAt: c.updatedAt,
     }));
 
@@ -412,6 +321,9 @@ app.get('/api/conversations/:id', authenticateJWT, async (req, res) => {
     res.json({
       id: conversation._id,
       title: conversation.title,
+      model: conversation.model,
+      status: conversation.status,
+      lastError: conversation.lastError,
       updatedAt: conversation.updatedAt,
       messages: conversation.messages,
     });

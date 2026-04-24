@@ -11,7 +11,7 @@ describe('static route modules', () => {
 
   it('chat route exports Chat heading html', () => {
     expect(chatModule.html).toContain('>Chat</h1>');
-    expect(chatModule.html).toContain('id="chat-models"');
+    expect(chatModule.html).toContain('id="chat-model-select"');
   });
 
   it('account route exports account settings heading html', () => {

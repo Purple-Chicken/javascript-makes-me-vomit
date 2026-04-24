@@ -8,6 +8,7 @@
     "api-auth.spec.ts",
     "multi-llm.spec.ts",
     "api-chat.spec.ts",
+    "chat-run-registry.spec.ts",
     "chat-route.spec.ts",
     "route-modules.spec.ts",
     "matrix-rain.spec.ts",

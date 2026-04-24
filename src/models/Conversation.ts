@@ -8,7 +8,10 @@ const MessageSchema = new mongoose.Schema({
 
 const ConversationSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+  model: { type: String },
   title: { type: String, default: 'New conversation' },
+  status: { type: String, enum: ['idle', 'running', 'completed', 'error'], default: 'completed' },
+  lastError: { type: String, default: null },
   messages: { type: [MessageSchema], default: [] },
 }, { timestamps: true });
 

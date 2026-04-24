@@ -1,9 +1,10 @@
 import { JSDOM } from 'jsdom';
 import chatModule from '../src/routes/chat.ts';
 
-describe('chat route multi-model UI', () => {
+describe('chat route model sessions UI', () => {
   let dom: JSDOM;
   let fetchSpy: jasmine.Spy;
+  let conversationReads = 0;
 
   const flush = async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -34,34 +35,56 @@ describe('chat route multi-model UI', () => {
 
     fetchSpy = spyOn(globalThis as any, 'fetch').and.callFake(async (url: string, init?: RequestInit) => {
       if (url === '/api/chat/models') {
-        return new Response(JSON.stringify({ models: ['qwen3:8b', 'mistral:7b'] }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-      if (url === '/api/chat') {
         return new Response(JSON.stringify({
-          conversationId: 'conv-1',
-          replies: [
-            { model: 'qwen3:8b', reply: 'First comparison' },
-            { model: 'mistral:7b', reply: 'Second comparison' },
+          models: [
+            { name: 'qwen3.5:2b', busy: true, conversationId: 'conv-qwen' },
+            { name: 'llama3.2:1b', busy: false, conversationId: null },
           ],
         }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         });
       }
-      if (url === '/api/chat/stream') {
-        return new Response('', { status: 500 });
+      if (url === '/api/chat') {
+        return new Response(JSON.stringify({
+          conversationId: 'conv-llama',
+          model: 'llama3.2:1b',
+          status: 'running',
+        }), {
+          status: 202,
+          headers: { 'Content-Type': 'application/json' },
+        });
       }
-      if (url === '/api/chat/stop') {
-        return new Response(JSON.stringify({ conversationId: 'conv-1' }), {
+      if (typeof url === 'string' && url.startsWith('/api/conversations/conv-llama')) {
+        conversationReads += 1;
+        if (conversationReads === 1) {
+          return new Response(JSON.stringify({
+            id: 'conv-llama',
+            model: 'llama3.2:1b',
+            status: 'running',
+            messages: [
+              { role: 'user', content: 'Talk to llama' },
+            ],
+          }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        return new Response(JSON.stringify({
+          id: 'conv-llama',
+          model: 'llama3.2:1b',
+          status: 'completed',
+          messages: [
+            { role: 'user', content: 'Talk to llama' },
+            { role: 'assistant', model: 'llama3.2:1b', content: 'Llama reply' },
+          ],
+        }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         });
       }
-      if (typeof url === 'string' && url.startsWith('/api/conversations/')) {
-        return new Response(JSON.stringify({ messages: [] }), {
+      if (url === '/api/conversations') {
+        return new Response(JSON.stringify([]), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         });
@@ -83,37 +106,40 @@ describe('chat route multi-model UI', () => {
     delete (globalThis as any).getComputedStyle;
   });
 
-  it('renders selectable chat models from the API', async () => {
+  it('renders a dropdown of local models and disables ones already in use', async () => {
     chatModule.onLoad?.();
     await flush();
 
-    const labels = Array.from(dom.window.document.querySelectorAll('#chat-models .chat-model-option span'))
-      .map((element) => element.textContent?.trim());
+    const select = dom.window.document.getElementById('chat-model-select') as HTMLSelectElement | null;
+    const options = Array.from(select?.options || []);
 
-    expect(labels).toEqual(['qwen3:8b', 'mistral:7b']);
+    expect(select).not.toBeNull();
+    expect(options.map((option) => option.value)).toEqual(['qwen3.5:2b', 'llama3.2:1b']);
+    expect(options[0].disabled).toBeTrue();
+    expect(options[1].disabled).toBeFalse();
+    expect(select?.value).toBe('llama3.2:1b');
   });
 
-  it('submits selected models to the multi-model endpoint and renders separate replies', async () => {
+  it('starts a conversation for the selected model and renders the reply after polling', async () => {
     chatModule.onLoad?.();
     await flush();
 
     const input = dom.window.document.getElementById('chat-input') as HTMLTextAreaElement;
-    input.value = 'Compare these models';
-
-    const checkboxes = Array.from(dom.window.document.querySelectorAll<HTMLInputElement>('input[name="chat-model"]'));
-    checkboxes[0].checked = true;
-    checkboxes[1].checked = true;
+    const select = dom.window.document.getElementById('chat-model-select') as HTMLSelectElement;
+    input.value = 'Talk to llama';
+    select.value = 'llama3.2:1b';
 
     const form = dom.window.document.getElementById('chatForm') as HTMLFormElement;
     form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
     await flush();
     await flush();
 
     const chatCall = fetchSpy.calls.all().find((call) => call.args[0] === '/api/chat');
     expect(chatCall).toBeDefined();
     expect(JSON.parse(chatCall!.args[1].body as string)).toEqual(jasmine.objectContaining({
-      message: 'Compare these models',
-      models: ['qwen3:8b', 'mistral:7b'],
+      message: 'Talk to llama',
+      model: 'llama3.2:1b',
     }));
 
     const labels = Array.from(dom.window.document.querySelectorAll('.chat-message.llm .bubble-role'))
@@ -123,9 +149,7 @@ describe('chat route multi-model UI', () => {
       .map((element) => element.textContent?.trim())
       .filter(Boolean);
 
-    expect(labels).toContain('qwen3:8b');
-    expect(labels).toContain('mistral:7b');
-    expect(replies).toContain('First comparison');
-    expect(replies).toContain('Second comparison');
+    expect(labels).toContain('llama3.2:1b');
+    expect(replies).toContain('Llama reply');
   });
 });
