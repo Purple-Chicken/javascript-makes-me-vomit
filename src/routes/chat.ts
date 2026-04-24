@@ -4,15 +4,31 @@ type ModelState = {
   conversationId: string | null;
 };
 
+type ConversationStatus = 'idle' | 'running' | 'awaiting-selection' | 'completed' | 'error';
+
+type PendingResponse = {
+  model: string;
+  status?: 'running' | 'completed' | 'error';
+  content?: string;
+  error?: string | null;
+};
+
+type PendingTurn = {
+  mode?: string;
+  responses?: PendingResponse[];
+};
+
 type ConversationData = {
   id?: string;
   model?: string;
-  status?: 'idle' | 'running' | 'completed' | 'error';
+  status?: ConversationStatus;
   lastError?: string | null;
   messages?: Array<{ role: string; model?: string; content: string }>;
+  pendingTurn?: PendingTurn | null;
 };
 
 const POLL_INTERVAL_MS = 750;
+const ASK_ALL_VALUE = '__ask_all__';
 
 const html = `
   <div class="chat-wrapper">
@@ -60,7 +76,7 @@ const onLoad = () => {
   const hashParams = new URLSearchParams(location.hash.split('?')[1] || '');
   let activeConversationId: string | null = hashParams.get('id');
   let selectedModel = hashParams.get('model') || '';
-  let currentStatus: 'idle' | 'running' | 'completed' | 'error' = 'idle';
+  let currentStatus: ConversationStatus = 'idle';
   let modelStates: ModelState[] = [];
   let pollTimer: number | null = null;
   let renderedSignature = '';
@@ -102,7 +118,9 @@ const onLoad = () => {
   };
 
   const getMessageLabel = (message: { role: string; model?: string }) =>
-    message.role === 'user' ? 'You' : (message.model || selectedModel || 'LLM');
+    message.role === 'user'
+      ? 'You'
+      : (message.model || (selectedModel && selectedModel !== ASK_ALL_VALUE ? selectedModel : '') || 'LLM');
 
   const clearPoll = () => {
     if (pollTimer !== null) {
@@ -124,8 +142,11 @@ const onLoad = () => {
   };
 
   const getCurrentModelState = () => modelStates.find((state) => state.name === selectedModel);
+  const getCurrentStatus = () => currentStatus;
   const isBusyElsewhere = (state?: ModelState) =>
     Boolean(state?.busy && state.conversationId && state.conversationId !== activeConversationId);
+  const isAskAllSelected = () => selectedModel === ASK_ALL_VALUE;
+  const isAskAllUnavailable = () => modelStates.length < 2 || modelStates.some((state) => isBusyElsewhere(state));
 
   const updateHashForConversation = () => {
     if (!activeConversationId || !window.history?.replaceState) {
@@ -141,16 +162,22 @@ const onLoad = () => {
     const currentModelState = getCurrentModelState();
     const lockedElsewhere = isBusyElsewhere(currentModelState);
     const runningHere = currentStatus === 'running';
+    const awaitingSelection = currentStatus === 'awaiting-selection';
+    const askAllUnavailable = isAskAllSelected() && isAskAllUnavailable();
     const hasModel = Boolean(selectedModel);
 
-    modelSelect.disabled = Boolean(activeConversationId) || !modelStates.length;
-    input.disabled = !hasModel || lockedElsewhere || runningHere;
+    modelSelect.disabled = !modelStates.length || runningHere || awaitingSelection;
+    input.disabled = !hasModel || lockedElsewhere || askAllUnavailable || runningHere || awaitingSelection;
     sendBtn.style.display = (!input.disabled && input.value.trim()) ? '' : 'none';
 
     if (!hasModel) {
       setBanner('No local Ollama models are available.', 'warning');
+    } else if (awaitingSelection) {
+      setBanner('Choose one response to save it as the main reply for this chat.', 'info');
+    } else if (askAllUnavailable) {
+      setBanner('Ask all is only available when at least two models are idle.', 'warning');
     } else if (runningHere) {
-      setBanner(`${selectedModel} is generating a response in this chat.`, 'info');
+      setBanner(`${isAskAllSelected() ? 'The selected models are' : selectedModel} generating a response in this chat.`, 'info');
     } else if (lockedElsewhere) {
       setBanner(`${selectedModel} is already generating in another chat. Start a new chat with a different model.`, 'warning');
     } else if (currentStatus === 'error') {
@@ -162,10 +189,14 @@ const onLoad = () => {
 
   const renderMessages = (conversation: ConversationData) => {
     const conversationMessages = Array.isArray(conversation.messages) ? conversation.messages : [];
+    const pendingResponses = Array.isArray(conversation.pendingTurn?.responses)
+      ? conversation.pendingTurn?.responses || []
+      : [];
     const signature = JSON.stringify({
       status: conversation.status,
       lastError: conversation.lastError,
       messages: conversationMessages,
+      pendingTurn: conversation.pendingTurn,
     });
     if (signature === renderedSignature) {
       return;
@@ -173,7 +204,9 @@ const onLoad = () => {
     renderedSignature = signature;
 
     if (!conversationMessages.length) {
-      const hintModel = selectedModel ? ` for ${escapeHtml(selectedModel)}` : '';
+      const hintModel = selectedModel
+        ? ` for ${escapeHtml(selectedModel === ASK_ALL_VALUE ? 'Ask all models' : selectedModel)}`
+        : '';
       messages.innerHTML = `<p class="start-hint">Start a new chat${hintModel}.</p>`;
       return;
     }
@@ -188,11 +221,33 @@ const onLoad = () => {
       return `<div class="chat-message ${cls}">${bubbleContent}</div>`;
     }).join('');
 
-    if (conversation.status === 'running') {
+    if (pendingResponses.length) {
+      const pendingMarkup = pendingResponses.map((response) => {
+        const body = response.error
+          ? `<p class="llm-text"><em>${escapeHtml(response.error)}</em></p>`
+          : response.status === 'running'
+            ? `<div class="llm-spinner"><span class="spinner"></span></div><p class="llm-text"><em>Generating response...</em></p>`
+            : `<p class="llm-text">${escapeHtml(response.content || 'No response.')}</p>`;
+        const chooseButton = response.status === 'completed' && response.content
+          ? `<button type="button" class="response-select-btn" data-select-model="${escapeAttr(response.model)}">Use this response</button>`
+          : '';
+        return `
+          <div class="chat-response-option" data-role="candidate-response">
+            <div class="chat-bubble llm">
+              <div class="bubble-role">${escapeHtml(response.model)}</div>
+              ${body}
+              ${chooseButton}
+            </div>
+          </div>`;
+      }).join('');
+      messages.innerHTML += `<div class="chat-response-options">${pendingMarkup}</div>`;
+    }
+
+    if (conversation.status === 'running' && !pendingResponses.length) {
       messages.innerHTML += `
         <div class="chat-message llm">
           <div class="chat-bubble llm">
-            <div class="bubble-role">${escapeHtml(selectedModel || conversation.model || 'LLM')}</div>
+            <div class="bubble-role">${escapeHtml(selectedModel === ASK_ALL_VALUE ? 'Ask all models' : (selectedModel || conversation.model || 'LLM'))}</div>
             <div class="llm-spinner"><span class="spinner"></span></div>
             <p class="llm-text"><em>Generating response...</em></p>
           </div>
@@ -203,7 +258,7 @@ const onLoad = () => {
 
   const renderModelSelect = () => {
     let nextStates = [...modelStates];
-    if (selectedModel && !nextStates.some((state) => state.name === selectedModel)) {
+    if (selectedModel && selectedModel !== ASK_ALL_VALUE && !nextStates.some((state) => state.name === selectedModel)) {
       nextStates = [{
         name: selectedModel,
         busy: currentStatus === 'running',
@@ -220,13 +275,15 @@ const onLoad = () => {
     }
 
     const unlockedDefault = modelStates.find((state) => !isBusyElsewhere(state))?.name || modelStates[0].name;
-    const preferredModel = activeConversationId
-      ? (selectedModel || unlockedDefault)
+    const askAllUnavailable = isAskAllUnavailable();
+    const preferredModel = selectedModel === ASK_ALL_VALUE
+      ? (askAllUnavailable ? unlockedDefault : ASK_ALL_VALUE)
       : (selectedModel && !isBusyElsewhere(modelStates.find((state) => state.name === selectedModel))
         ? selectedModel
         : unlockedDefault);
 
-    modelSelect.innerHTML = modelStates.map((state) => {
+    const askAllOption = `<option value="${ASK_ALL_VALUE}"${askAllUnavailable ? ' disabled' : ''}>Ask all models</option>`;
+    modelSelect.innerHTML = askAllOption + modelStates.map((state) => {
       const disabled = isBusyElsewhere(state) && state.name !== selectedModel;
       const label = disabled ? `${state.name} (busy)` : state.name;
       return `<option value="${escapeAttr(state.name)}"${disabled ? ' disabled' : ''}>${escapeHtml(label)}</option>`;
@@ -267,6 +324,9 @@ const onLoad = () => {
     }
 
     const data = await res.json() as ConversationData;
+    if (data.pendingTurn?.mode === 'ask-all') {
+      selectedModel = ASK_ALL_VALUE;
+    }
     if (typeof data.model === 'string' && data.model) {
       selectedModel = data.model;
     }
@@ -375,9 +435,15 @@ const onLoad = () => {
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    if (currentStatus === 'running') return;
+    if (currentStatus === 'running' || currentStatus === 'awaiting-selection') return;
     const text = input.value.trim();
-    if (!text || !selectedModel) return;
+    const requestedModel = modelSelect.value || selectedModel;
+    if (!text || !requestedModel) return;
+    selectedModel = requestedModel;
+    if (requestedModel === ASK_ALL_VALUE && isAskAllUnavailable()) {
+      updateComposerState();
+      return;
+    }
 
     sendBtn.style.display = 'none';
     const res = await fetch('/api/chat', {
@@ -386,16 +452,16 @@ const onLoad = () => {
       body: JSON.stringify({
         message: text,
         conversationId: activeConversationId,
-        model: selectedModel,
+        model: requestedModel,
       }),
     });
 
     if (res.status === 409) {
       await loadModelStates();
       const data = await res.json().catch(() => ({}));
-      setBanner(`${selectedModel} is already generating in another chat.`, 'warning');
+      setBanner(`${requestedModel} is already generating in another chat.`, 'warning');
       if (typeof data.activeConversationId === 'string') {
-        const currentState = modelStates.find((state) => state.name === selectedModel);
+        const currentState = modelStates.find((state) => state.name === requestedModel);
         if (currentState) {
           currentState.busy = true;
           currentState.conversationId = data.activeConversationId;
@@ -411,9 +477,9 @@ const onLoad = () => {
       return;
     }
 
-    const data = await res.json() as { conversationId?: string; model?: string; status?: 'running' };
+    const data = await res.json() as { conversationId?: string; model?: string; status?: 'running'; mode?: string };
     activeConversationId = data.conversationId || activeConversationId;
-    selectedModel = data.model || selectedModel;
+    selectedModel = data.mode === 'ask-all' ? ASK_ALL_VALUE : (data.model || selectedModel);
     currentStatus = data.status || 'running';
     input.value = '';
     input.style.height = 'auto';
@@ -429,6 +495,36 @@ const onLoad = () => {
   });
 
   messages.addEventListener('click', (e) => {
+    const selectResponseBtn = (e.target as HTMLElement).closest('[data-select-model]') as HTMLButtonElement | null;
+    if (selectResponseBtn && activeConversationId) {
+      const model = selectResponseBtn.dataset.selectModel;
+      if (!model) {
+        return;
+      }
+
+      void (async () => {
+        const res = await fetch(`/api/conversations/${encodeURIComponent(activeConversationId!)}/select-response`, {
+          method: 'POST',
+          headers: authHeaders(true),
+          body: JSON.stringify({ model }),
+        });
+        if (!res.ok) {
+          setBanner('Failed to save the selected response.', 'warning');
+          return;
+        }
+
+        const data = await res.json() as ConversationData;
+        selectedModel = typeof data.model === 'string' && data.model ? data.model : model;
+        currentStatus = data.status || 'completed';
+        renderedSignature = '';
+        renderMessages(data);
+        updateComposerState();
+        window.dispatchEvent(new CustomEvent('sidebar:refresh', { detail: { activeId: activeConversationId } }));
+        await loadModelStates();
+      })();
+      return;
+    }
+
     const btn = (e.target as HTMLElement).closest('.bubble-copy-btn') as HTMLElement | null;
     if (!btn) return;
     const message = btn.closest('.chat-message');
@@ -467,7 +563,7 @@ const onLoad = () => {
   void (async () => {
     await loadModelStates();
     await fetchConversation();
-    if (currentStatus === 'running') {
+    if (getCurrentStatus() === 'running') {
       pollConversation(POLL_INTERVAL_MS);
     }
     resizeInput();

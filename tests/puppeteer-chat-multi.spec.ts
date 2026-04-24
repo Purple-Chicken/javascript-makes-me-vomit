@@ -25,7 +25,8 @@ describe('puppeteer multi-model chat flow', () => {
   let server: ViteDevServer | null = null;
   let baseUrl = '';
   let originalTimeout = 0;
-  let llamaConversationReads = 0;
+  let conversationReads = 0;
+  let responseSelected = false;
 
   beforeAll(async () => {
     if (typeof jasmine !== 'undefined') {
@@ -63,7 +64,7 @@ describe('puppeteer multi-model chat flow', () => {
         return;
       }
       if (url.pathname === '/api/conversations') {
-        await request.respond({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: 'conv-qwen', title: 'qwen3.5:2b: Hold qwen open', updatedAt: new Date().toISOString() }]) });
+        await request.respond({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
         return;
       }
       if (url.pathname === '/api/chat/models') {
@@ -71,21 +72,26 @@ describe('puppeteer multi-model chat flow', () => {
           status: 200,
           contentType: 'application/json',
           body: JSON.stringify({ models: [
-            { name: 'qwen3.5:2b', busy: true, conversationId: 'conv-qwen' },
+            { name: 'qwen3.5:2b', busy: false, conversationId: null },
             { name: 'llama3.2:1b', busy: false, conversationId: null },
           ] }),
         });
         return;
       }
-      if (url.pathname === '/api/conversations/conv-qwen') {
+      if (url.pathname === '/api/conversations/conv-compare/select-response') {
+        responseSelected = true;
         await request.respond({
           status: 200,
           contentType: 'application/json',
           body: JSON.stringify({
-            id: 'conv-qwen',
-            model: 'qwen3.5:2b',
-            status: 'running',
-            messages: [{ role: 'user', content: 'Hold qwen open' }],
+            id: 'conv-compare',
+            model: 'llama3.2:1b',
+            status: 'completed',
+            pendingTurn: null,
+            messages: [
+              { role: 'user', content: 'Compare models in the browser' },
+              { role: 'assistant', model: 'llama3.2:1b', content: 'Browser llama reply' },
+            ],
           }),
         });
         return;
@@ -95,30 +101,59 @@ describe('puppeteer multi-model chat flow', () => {
           status: 202,
           contentType: 'application/json',
           body: JSON.stringify({
-            conversationId: 'conv-llama',
-            model: 'llama3.2:1b',
+            conversationId: 'conv-compare',
+            mode: 'ask-all',
             status: 'running',
           }),
         });
         return;
       }
-      if (url.pathname === '/api/conversations/conv-llama') {
-        llamaConversationReads += 1;
-        const body = llamaConversationReads === 1
-          ? {
-              id: 'conv-llama',
-              model: 'llama3.2:1b',
-              status: 'running',
-              messages: [{ role: 'user', content: 'Compare models in the browser' }],
-            }
-          : {
-              id: 'conv-llama',
+      if (url.pathname === '/api/conversations/conv-compare') {
+        if (responseSelected) {
+          await request.respond({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              id: 'conv-compare',
               model: 'llama3.2:1b',
               status: 'completed',
+              pendingTurn: null,
               messages: [
                 { role: 'user', content: 'Compare models in the browser' },
                 { role: 'assistant', model: 'llama3.2:1b', content: 'Browser llama reply' },
               ],
+            }),
+          });
+          return;
+        }
+
+        conversationReads += 1;
+        const body = conversationReads === 1
+          ? {
+              id: 'conv-compare',
+              status: 'running',
+              messages: [{ role: 'user', content: 'Compare models in the browser' }],
+              pendingTurn: {
+                mode: 'ask-all',
+                responses: [
+                  { model: 'qwen3.5:2b', status: 'completed', content: 'Browser qwen reply' },
+                  { model: 'llama3.2:1b', status: 'running' },
+                ],
+              },
+            }
+          : {
+              id: 'conv-compare',
+              status: 'awaiting-selection',
+              messages: [
+                { role: 'user', content: 'Compare models in the browser' },
+              ],
+              pendingTurn: {
+                mode: 'ask-all',
+                responses: [
+                  { model: 'qwen3.5:2b', status: 'completed', content: 'Browser qwen reply' },
+                  { model: 'llama3.2:1b', status: 'completed', content: 'Browser llama reply' },
+                ],
+              },
             };
         await request.respond({
           status: 200,
@@ -134,7 +169,7 @@ describe('puppeteer multi-model chat flow', () => {
     await page.evaluate(() => {
       localStorage.setItem('token', 'jwt-token-1');
     });
-    await page.goto(`${baseUrl}/#/chat?id=conv-qwen`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${baseUrl}/#/chat`, { waitUntil: 'domcontentloaded' });
   }, 60000);
 
   afterAll(async () => {
@@ -152,29 +187,26 @@ describe('puppeteer multi-model chat flow', () => {
     }
   }, 60000);
 
-  it('opens a new chat while qwen is busy and starts a llama conversation', async () => {
+  it('asks all models in one chat and saves the selected response', async () => {
     if (!page) {
       throw new Error('Puppeteer page not initialized.');
     }
 
-    await page.waitForSelector('#nav-new-chat');
-    await page.evaluate(() => {
-      (document.getElementById('nav-new-chat') as HTMLElement | null)?.click();
-    });
-    await page.waitForFunction(() => {
-      const select = document.querySelector('#chat-model-select') as HTMLSelectElement | null;
-      return window.location.hash === '#/chat' && !!select && select.value === 'llama3.2:1b';
-    });
-
-    const optionStates = await page.$$eval('#chat-model-select option', (options) =>
-      options.map((option) => ({ value: option.getAttribute('value'), disabled: option.disabled }))
-    );
-    expect(optionStates).toContain(jasmine.objectContaining({ value: 'qwen3.5:2b', disabled: true }));
-
-    await page.select('#chat-model-select', 'llama3.2:1b');
+    await page.waitForSelector('#chat-model-select');
+    await page.select('#chat-model-select', '__ask_all__');
     await page.type('#chat-input', 'Compare models in the browser');
     await page.evaluate(() => {
       (document.getElementById('chatForm') as HTMLFormElement | null)?.requestSubmit();
+    });
+
+    await page.waitForFunction(() => {
+      const labels = Array.from(document.querySelectorAll('.chat-response-option .bubble-role')).map((el) => el.textContent?.trim());
+      const replies = Array.from(document.querySelectorAll('.chat-response-option .llm-text')).map((el) => el.textContent?.trim());
+      return labels.includes('qwen3.5:2b') && labels.includes('llama3.2:1b') && replies.includes('Browser llama reply');
+    });
+
+    await page.evaluate(() => {
+      (document.querySelector('button[data-select-model="llama3.2:1b"]') as HTMLButtonElement | null)?.click();
     });
 
     await page.waitForFunction(() => {

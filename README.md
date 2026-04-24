@@ -39,7 +39,7 @@ Once you `cd` into the repository, you would need to make the following changes:
 - Copy `.env.example` into `.env`, making changes as needed 
 - Start `ollama` and database using 
 ```docker compose -f backend/docker-compose.yaml up -d```
-- Pull the Ollama models used by the current multi-model chat UI (first time only):
+- Pull the Ollama models listed in `.env.example` / `.env` (first time only). These are the exact model tags shown in the chat dropdown, and the UI adds an `Ask all` option on top of them automatically:
 ```docker exec ollama ollama pull qwen3.5:2b```
 ```docker exec ollama ollama pull deepseek-r1:1.5b```
 ```docker exec ollama ollama pull llama3.2:1b```
@@ -48,7 +48,9 @@ Once you `cd` into the repository, you would need to make the following changes:
 - run `npm i` to install/update all the node modules
 - run `npm run dev` to run the development (testing) environment 
 
-> **Ollama configuration:** The chat feature calls the Ollama container at `http://127.0.0.1:11434`. `OLLAMA_MODEL` sets the default single-model / streamed reply model, and `OLLAMA_MODELS` sets the selectable models shown in the chat UI. The current recommended configuration is `OLLAMA_MODEL="qwen3.5:2b"` and `OLLAMA_MODELS="qwen3.5:2b,deepseek-r1:1.5b,llama3.2:1b,gemma3:1b"`.
+> **Ollama configuration:** The chat feature calls the Ollama container at `http://127.0.0.1:11434`. `OLLAMA_MODEL` sets the default single-model reply, and `OLLAMA_MODELS` sets the selectable models shown in the chat UI in that same order. The `Ask all` dropdown option uses that same configured list. The recommended configuration is `OLLAMA_MODEL="qwen3.5:2b"` and `OLLAMA_MODELS="qwen3.5:2b,deepseek-r1:1.5b,llama3.2:1b,gemma3:1b"`.
+
+> If you change `OLLAMA_MODELS`, also pull those same tags with `docker exec ollama ollama pull ...` so a fresh clone following the README gets the exact same dropdown options and working chat responses.
 
 Alternatively, you can run this handy dandy one-liner that does it all for you: 
 ```

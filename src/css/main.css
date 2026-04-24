@@ -696,6 +696,43 @@ body.nav-collapsed .chat-header {
   opacity: 0.6;
 }
 
+.chat-response-options {
+  display: grid;
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.chat-response-option {
+  width: 100%;
+}
+
+.chat-response-option .chat-bubble {
+  width: 100%;
+}
+
+.response-select-btn {
+  margin-top: 12px;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, rgba(0,0,0,0.3));
+  color: var(--text-color);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.85em;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: border-color 0.2s ease, transform 0.2s ease, background 0.2s ease;
+}
+
+.response-select-btn:hover {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 18%, rgba(0,0,0,0.34));
+  transform: translateY(-1px);
+}
+
+.response-select-btn:active {
+  transform: translateY(0);
+}
+
 .chat-textarea {
   resize: none;
   overflow: hidden;

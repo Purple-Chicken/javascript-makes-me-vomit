@@ -34,7 +34,6 @@ describe('chat API model session integration', () => {
   let ollamaServer: http.Server | null = null;
   let originalTimeout = 0;
   let apiRequest: ReturnType<typeof createApiRequest>;
-  const pendingModels = new Map<string, () => void>();
 
   const waitForConversationStatus = async (
     token: string,
@@ -70,9 +69,11 @@ describe('chat API model session integration', () => {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
           models: [
-            { name: 'qwen3.5:2b' },
             { name: 'llama3.2:1b' },
+            { name: 'qwen3.5:2b' },
             { name: 'gemma3:1b' },
+            { name: 'deepseek-r1:1.5b' },
+            { name: 'mistral:7b' },
           ],
         }));
         return;
@@ -97,12 +98,6 @@ describe('chat API model session integration', () => {
       const prompt = payload.messages?.at(-1)?.content ?? '';
       const model = payload.model ?? 'unknown';
 
-      if (prompt.includes('Hold qwen open')) {
-        await new Promise<void>((resolve) => {
-          pendingModels.set(model, resolve);
-        });
-      }
-
       const content = `<think>internal</think>${model} answered ${prompt}`;
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -126,7 +121,7 @@ describe('chat API model session integration', () => {
           MONGODB_URI: mongoUri,
           OLLAMA_URL: `http://127.0.0.1:${ollamaPort}`,
           OLLAMA_MODEL: 'qwen3.5:2b',
-          OLLAMA_MODELS: 'qwen3.5:2b,llama3.2:1b,gemma3:1b',
+          OLLAMA_MODELS: 'qwen3.5:2b,deepseek-r1:1.5b,llama3.2:1b,gemma3:1b',
         },
       },
     );
@@ -152,7 +147,7 @@ describe('chat API model session integration', () => {
     }
   }, 60000);
 
-  it('lists local chat models with per-model busy state', async () => {
+  it('lists the configured chat models in env order with per-model busy state', async () => {
     const username = `chat_models_${Date.now()}`;
     const password = 'password-123';
 
@@ -172,12 +167,13 @@ describe('chat API model session integration', () => {
     expect(models.status).toBe(200);
     expect(models.body.models).toEqual([
       { name: 'qwen3.5:2b', busy: false, conversationId: null },
+      { name: 'deepseek-r1:1.5b', busy: false, conversationId: null },
       { name: 'llama3.2:1b', busy: false, conversationId: null },
       { name: 'gemma3:1b', busy: false, conversationId: null },
     ]);
   });
 
-  it('blocks a second run on the same model while allowing a different model', async () => {
+  it('asks all models for one prompt and persists the selected response', async () => {
     const username = `chat_multi_${Date.now()}`;
     const password = 'password-123';
 
@@ -193,79 +189,65 @@ describe('chat API model session integration', () => {
     });
     const token = login.body.token as string;
 
-    const qwenChat = await apiRequest(
+    const askAllChat = await apiRequest(
       '/api/chat',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          message: 'Hold qwen open',
-          model: 'qwen3.5:2b',
+          message: 'Compare these models',
+          model: '__ask_all__',
         }),
       },
       token,
     );
 
-    expect(qwenChat.status).toBe(202);
+    expect(askAllChat.status).toBe(202);
+    expect(askAllChat.body).toEqual(jasmine.objectContaining({
+      conversationId: jasmine.any(String),
+      status: 'running',
+      mode: 'ask-all',
+    }));
 
-    const busyModels = await apiRequest('/api/chat/models', {}, token);
-    expect(busyModels.status).toBe(200);
-    expect(busyModels.body.models).toEqual([
-      { name: 'qwen3.5:2b', busy: true, conversationId: qwenChat.body.conversationId },
-      { name: 'llama3.2:1b', busy: false, conversationId: null },
-      { name: 'gemma3:1b', busy: false, conversationId: null },
+    const awaitingSelection = await waitForConversationStatus(token, askAllChat.body.conversationId, 'awaiting-selection');
+    expect(awaitingSelection.messages).toEqual([
+      { role: 'user', content: 'Compare these models' },
     ]);
+    expect(awaitingSelection.pendingTurn).toEqual({
+      mode: 'ask-all',
+      responses: [
+        { model: 'qwen3.5:2b', status: 'completed', content: 'qwen3.5:2b answered Compare these models' },
+        { model: 'deepseek-r1:1.5b', status: 'completed', content: 'deepseek-r1:1.5b answered Compare these models' },
+        { model: 'llama3.2:1b', status: 'completed', content: 'llama3.2:1b answered Compare these models' },
+        { model: 'gemma3:1b', status: 'completed', content: 'gemma3:1b answered Compare these models' },
+      ],
+    });
 
-    const duplicateQwen = await apiRequest(
-      '/api/chat',
+    const selectedResponse = await apiRequest(
+      `/api/conversations/${askAllChat.body.conversationId}/select-response`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: 'Second qwen prompt',
-          model: 'qwen3.5:2b',
-        }),
+        body: JSON.stringify({ model: 'llama3.2:1b' }),
       },
       token,
     );
-    expect(duplicateQwen.status).toBe(409);
-    expect(duplicateQwen.body.activeConversationId).toBe(qwenChat.body.conversationId);
 
-    const llamaChat = await apiRequest(
-      '/api/chat',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: 'Talk to llama',
-          model: 'llama3.2:1b',
-        }),
-      },
-      token,
-    );
-    expect(llamaChat.status).toBe(202);
-
-    pendingModels.get('qwen3.5:2b')?.();
-
-    const completedQwen = await waitForConversationStatus(token, qwenChat.body.conversationId, 'completed');
-    const completedLlama = await waitForConversationStatus(token, llamaChat.body.conversationId, 'completed');
-
-    expect(completedQwen.model).toBe('qwen3.5:2b');
-    expect(completedQwen.messages).toEqual([
-      { role: 'user', content: 'Hold qwen open' },
-      { role: 'assistant', model: 'qwen3.5:2b', content: 'qwen3.5:2b answered Hold qwen open' },
-    ]);
-    expect(completedLlama.model).toBe('llama3.2:1b');
-    expect(completedLlama.messages).toEqual([
-      { role: 'user', content: 'Talk to llama' },
-      { role: 'assistant', model: 'llama3.2:1b', content: 'llama3.2:1b answered Talk to llama' },
+    expect(selectedResponse.status).toBe(200);
+    expect(selectedResponse.body.status).toBe('completed');
+    expect(selectedResponse.body.model).toBe('llama3.2:1b');
+    expect(selectedResponse.body.pendingTurn).toBeNull();
+    expect(selectedResponse.body.messages).toEqual([
+      { role: 'user', content: 'Compare these models' },
+      { role: 'assistant', model: 'llama3.2:1b', content: 'llama3.2:1b answered Compare these models' },
     ]);
 
-    const unlockedModels = await apiRequest('/api/chat/models', {}, token);
-    expect(unlockedModels.body.models).toEqual([
-      { name: 'qwen3.5:2b', busy: false, conversationId: null },
-      { name: 'llama3.2:1b', busy: false, conversationId: null },
-      { name: 'gemma3:1b', busy: false, conversationId: null },
+    const savedConversation = await apiRequest(`/api/conversations/${askAllChat.body.conversationId}`, {}, token);
+    expect(savedConversation.status).toBe(200);
+    expect(savedConversation.body.model).toBe('llama3.2:1b');
+    expect(savedConversation.body.messages).toEqual([
+      { role: 'user', content: 'Compare these models' },
+      { role: 'assistant', model: 'llama3.2:1b', content: 'llama3.2:1b answered Compare these models' },
     ]);
   });
 });

@@ -31,6 +31,7 @@ const DEFAULT_CHAT_MODELS = resolveRequestedModels(
   (process.env.OLLAMA_MODELS || OLLAMA_MODEL).split(','),
   [OLLAMA_MODEL],
 );
+const ASK_ALL_VALUE = '__ask_all__';
 const chatRunRegistry = createChatRunRegistry();
 
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/sha257')
@@ -166,11 +167,14 @@ async function fetchLocalOllamaModels(): Promise<string[]> {
     }
 
     const data = await res.json() as { models?: Array<{ name?: string }> };
-    const models = resolveRequestedModels(
-      (data.models || []).map((model) => model.name || ''),
-      DEFAULT_CHAT_MODELS,
+    const installedModels = new Set(
+      resolveRequestedModels(
+        (data.models || []).map((model) => model.name || ''),
+        DEFAULT_CHAT_MODELS,
+      ),
     );
-    return models.length ? models : DEFAULT_CHAT_MODELS;
+    const configuredModels = DEFAULT_CHAT_MODELS.filter((model) => installedModels.has(model));
+    return configuredModels.length ? configuredModels : DEFAULT_CHAT_MODELS;
   } catch {
     return DEFAULT_CHAT_MODELS;
   }
@@ -181,31 +185,147 @@ const createConversationTitle = (model: string, message: string) => {
   return `${model}: ${snippet}`;
 };
 
+const serializePendingTurn = (pendingTurn: any) => {
+  if (!pendingTurn) {
+    return null;
+  }
+
+  return {
+    mode: pendingTurn.mode,
+    responses: (pendingTurn.responses || []).map((response: any) => ({
+      model: response.model,
+      status: response.status,
+      ...(response.content ? { content: response.content } : {}),
+      ...(response.error ? { error: response.error } : {}),
+    })),
+  };
+};
+
+const serializeConversation = (conversation: any) => ({
+  id: conversation._id,
+  title: conversation.title,
+  model: conversation.model ?? null,
+  status: conversation.status,
+  lastError: conversation.lastError ?? null,
+  pendingTurn: serializePendingTurn(conversation.pendingTurn),
+  updatedAt: conversation.updatedAt,
+  messages: conversation.messages,
+});
+
+const reserveModels = (
+  userId: string,
+  models: string[],
+  conversationId: string,
+) => {
+  const reservedModels: string[] = [];
+
+  for (const model of models) {
+    const reservation = chatRunRegistry.reserve({ userId, model, conversationId });
+    if (!reservation.granted) {
+      reservedModels.forEach((reservedModel) => chatRunRegistry.release(userId, reservedModel));
+      return reservation;
+    }
+    reservedModels.push(model);
+  }
+
+  return { granted: true } as const;
+};
+
 const runConversationInBackground = async (
   userId: string,
   conversationId: string,
-  model: string,
+  models: string[],
   messages: { role: string; content: string }[],
 ) => {
-  try {
-    const reply = normalizeAssistantReply(await queryOllama(model, messages)) || 'No response.';
+  const responses = await Promise.all(models.map(async (model) => {
+    try {
+      return {
+        model,
+        status: 'completed' as const,
+        content: normalizeAssistantReply(await queryOllama(model, messages)) || 'No response.',
+        error: null,
+      };
+    } catch (err: any) {
+      return {
+        model,
+        status: 'error' as const,
+        content: '',
+        error: err.message || 'Chat failed',
+      };
+    } finally {
+      chatRunRegistry.release(userId, model);
+    }
+  }));
+
+  const completedResponses = responses.filter((response) => response.status === 'completed' && response.content);
+  if (models.length === 1) {
+    const onlyResponse = completedResponses[0];
+    if (onlyResponse) {
+      await Conversation.findOneAndUpdate(
+        { _id: conversationId, userId },
+        {
+          $push: { messages: { role: 'assistant', model: onlyResponse.model, content: onlyResponse.content } },
+          $set: {
+            model: onlyResponse.model,
+            status: 'completed',
+            lastError: null,
+            pendingTurn: null,
+          },
+        },
+      );
+      return;
+    }
+
     await Conversation.findOneAndUpdate(
       { _id: conversationId, userId },
       {
-        $push: { messages: { role: 'assistant', model, content: reply } },
-        $set: { status: 'completed', lastError: null },
+        $set: {
+          status: 'error',
+          lastError: responses[0]?.error || 'Chat failed',
+          pendingTurn: null,
+        },
       },
     );
-  } catch (err: any) {
-    await Conversation.findOneAndUpdate(
-      { _id: conversationId, userId },
-      {
-        $set: { status: 'error', lastError: err.message || 'Chat failed' },
-      },
-    );
-  } finally {
-    chatRunRegistry.release(userId, model);
+    return;
   }
+
+  if (completedResponses.length) {
+    await Conversation.findOneAndUpdate(
+      { _id: conversationId, userId },
+      {
+        $set: {
+          status: 'awaiting-selection',
+          lastError: responses.some((response) => response.error)
+            ? responses.map((response) => response.error).filter(Boolean).join('; ')
+            : null,
+          pendingTurn: {
+            mode: 'ask-all',
+            responses,
+          },
+        },
+      },
+    );
+    return;
+  }
+
+  await Conversation.findOneAndUpdate(
+    { _id: conversationId, userId },
+    {
+      $set: {
+        status: 'error',
+        lastError: responses.map((response) => response.error).filter(Boolean).join('; ') || 'Chat failed',
+        pendingTurn: null,
+      },
+    },
+  );
+};
+
+const resolveChatModels = async (requestedModel: string) => {
+  if (requestedModel !== ASK_ALL_VALUE) {
+    return [requestedModel];
+  }
+
+  return await fetchLocalOllamaModels();
 };
 
 app.get('/api/chat/models', authenticateJWT, async (req, res) => {
@@ -228,34 +348,33 @@ app.post('/api/chat', authenticateJWT, async (req, res) => {
       return res.status(400).json({ error: 'model is required' });
     }
 
+    const requestedModels = await resolveChatModels(model);
+    if (model === ASK_ALL_VALUE && requestedModels.length < 2) {
+      return res.status(400).json({ error: 'Ask all requires at least two local models' });
+    }
+
     let conversation: any;
     if (conversationId) {
       conversation = await Conversation.findOne({ _id: conversationId, userId });
       if (!conversation) {
         return res.status(404).json({ error: 'Conversation not found' });
       }
-      if (conversation.model && conversation.model !== model) {
-        return res.status(400).json({ error: 'Conversation already belongs to a different model' });
-      }
-      if (conversation.status === 'running') {
-        return res.status(409).json({ error: 'Model is already busy', activeConversationId: String(conversation._id) });
+      if (conversation.status === 'running' || conversation.status === 'awaiting-selection') {
+        return res.status(409).json({ error: 'This conversation already has a pending response' });
       }
     } else {
       conversation = new Conversation({
         userId,
-        model,
-        title: createConversationTitle(model, message),
+        model: model === ASK_ALL_VALUE ? null : model,
+        title: createConversationTitle(model === ASK_ALL_VALUE ? 'Ask all' : model, message),
         status: 'idle',
         lastError: null,
+        pendingTurn: null,
         messages: [],
       });
     }
 
-    const lock = chatRunRegistry.reserve({
-      userId,
-      model,
-      conversationId: String(conversation._id),
-    });
+    const lock = reserveModels(userId, requestedModels, String(conversation._id));
     if (!lock.granted) {
       return res.status(409).json({
         error: 'Model is already busy',
@@ -269,20 +388,64 @@ app.post('/api/chat', authenticateJWT, async (req, res) => {
     ];
 
     conversation.messages.push({ role: 'user', content: message });
-    conversation.model = conversation.model || model;
+    conversation.model = model === ASK_ALL_VALUE ? conversation.model ?? null : model;
     conversation.status = 'running';
     conversation.lastError = null;
+    conversation.pendingTurn = null;
     await conversation.save();
 
-    void runConversationInBackground(userId, String(conversation._id), model, ollamaMessages);
+    void runConversationInBackground(userId, String(conversation._id), requestedModels, ollamaMessages);
 
-    res.status(202).json({
-      conversationId: conversation._id,
-      model,
-      status: 'running',
-    });
+    res.status(202).json(
+      model === ASK_ALL_VALUE
+        ? {
+            conversationId: conversation._id,
+            mode: 'ask-all',
+            status: 'running',
+          }
+        : {
+            conversationId: conversation._id,
+            model,
+            status: 'running',
+          },
+    );
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Chat failed' });
+  }
+});
+
+app.post('/api/conversations/:id/select-response', authenticateJWT, async (req, res) => {
+  try {
+    const userId = (req.user as any)._id;
+    const { model } = req.body;
+
+    if (!model || typeof model !== 'string') {
+      return res.status(400).json({ error: 'model is required' });
+    }
+
+    const conversation: any = await Conversation.findOne({ _id: req.params.id, userId });
+    if (!conversation) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+    if (conversation.status !== 'awaiting-selection' || !conversation.pendingTurn?.responses?.length) {
+      return res.status(409).json({ error: 'This conversation has no pending responses to select from' });
+    }
+
+    const selectedResponse = conversation.pendingTurn.responses.find((response: any) => response.model === model);
+    if (!selectedResponse || selectedResponse.status !== 'completed' || !selectedResponse.content) {
+      return res.status(400).json({ error: 'Selected model response is not available' });
+    }
+
+    conversation.messages.push({ role: 'assistant', model, content: selectedResponse.content });
+    conversation.model = model;
+    conversation.status = 'completed';
+    conversation.lastError = null;
+    conversation.pendingTurn = null;
+    await conversation.save();
+
+    res.json(serializeConversation(conversation.toObject()));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to save selected response' });
   }
 });
 
@@ -318,15 +481,7 @@ app.get('/api/conversations/:id', authenticateJWT, async (req, res) => {
     if (!conversation) {
       return res.status(404).json({ error: 'Conversation not found' });
     }
-    res.json({
-      id: conversation._id,
-      title: conversation.title,
-      model: conversation.model,
-      status: conversation.status,
-      lastError: conversation.lastError,
-      updatedAt: conversation.updatedAt,
-      messages: conversation.messages,
-    });
+    res.json(serializeConversation(conversation));
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to get conversation' });
   }
