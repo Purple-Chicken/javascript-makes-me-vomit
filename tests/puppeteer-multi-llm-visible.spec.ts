@@ -1,6 +1,6 @@
 import net from 'node:net';
 import path from 'node:path';
-import puppeteer, { type Browser, type HTTPRequest, type Page } from 'puppeteer';
+import puppeteer, { type Browser, type Page } from 'puppeteer';
 import { createServer, type ViteDevServer } from 'vite';
 
 const getAvailablePort = async (): Promise<number> =>
@@ -19,58 +19,46 @@ const getAvailablePort = async (): Promise<number> =>
     });
   });
 
-const respondWithMockApi = async (request: HTTPRequest) => {
-  const url = new URL(request.url());
-  const { pathname } = url;
-  const method = request.method();
+const API_BASE_URL = process.env.PUPPETEER_API_BASE_URL || 'http://127.0.0.1:5000';
 
-  if (method === 'GET' && pathname === '/api/users/me') {
-    await request.respond({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        username: 'puppeteer-user',
-        preferences: {
-          matrixRain: true,
-          lightMode: false,
-          font: 'ibm-plex',
-          themeColor: 'green',
-          defaultModelSet: [
-            { provider: 'Ollama', model: 'qwen2.5:3b' },
-            { provider: 'Ollama', model: 'mistral:7b' },
-          ],
-        },
-      }),
-    });
-    return;
+const waitForApi = async (timeoutMs = 30000) => {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/users/me`);
+      if ([200, 401].includes(res.status)) {
+        return;
+      }
+    } catch {
+      // Retry until timeout.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  throw new Error(`Timed out waiting for API server at ${API_BASE_URL}`);
+};
+
+const createAuthToken = async () => {
+  const username = `puppeteer_visible_${Date.now()}`;
+  const password = 'puppeteer-visible-pass-123';
+
+  await fetch(`${API_BASE_URL}/api/users`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  });
+
+  const login = await fetch(`${API_BASE_URL}/api/sessions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  });
+
+  const body = await login.json().catch(() => ({}));
+  if (!login.ok || typeof body.token !== 'string' || !body.token) {
+    throw new Error(`Failed to authenticate Puppeteer user against ${API_BASE_URL}`);
   }
 
-  if (method === 'POST' && pathname === '/api/chat') {
-    const payload = JSON.parse(request.postData() || '{}') as {
-      message?: string;
-      selectedModels?: Array<{ provider?: string; model?: string }>;
-    };
-
-    const selected = Array.isArray(payload.selectedModels) ? payload.selectedModels : [];
-    const responses = selected.map((m) => ({
-      provider: m.provider || 'Ollama',
-      model: m.model || 'unknown-model',
-      content: `Mock reply from ${m.model || 'unknown-model'}: ${payload.message || ''}`,
-    }));
-
-    await request.respond({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        conversationId: 'conv-puppeteer-1',
-        responses,
-        errors: [],
-      }),
-    });
-    return;
-  }
-
-  await request.continue();
+  return body.token as string;
 };
 
 describe('puppeteer visible multi-LLM flow', () => {
@@ -78,6 +66,7 @@ describe('puppeteer visible multi-LLM flow', () => {
   let page: Page | null = null;
   let server: ViteDevServer | null = null;
   let baseUrl = '';
+  let authToken = '';
   let originalTimeout = 0;
 
   const pause = (ms: number) =>
@@ -90,6 +79,9 @@ describe('puppeteer visible multi-LLM flow', () => {
       originalTimeout = jasmine.DEFAULT_TIMEOUT_INTERVAL;
       jasmine.DEFAULT_TIMEOUT_INTERVAL = 60000;
     }
+
+    await waitForApi();
+    authToken = await createAuthToken();
 
     const port = await getAvailablePort();
     const root = path.resolve('.');
@@ -114,14 +106,9 @@ describe('puppeteer visible multi-LLM flow', () => {
     });
 
     page = await browser.newPage();
-    await page.evaluateOnNewDocument(() => {
-      localStorage.setItem('token', 'puppeteer-visible-token');
-    });
-
-    await page.setRequestInterception(true);
-    page.on('request', (request) => {
-      void respondWithMockApi(request);
-    });
+    await page.evaluateOnNewDocument((token) => {
+      localStorage.setItem('token', token);
+    }, authToken);
 
     await page.goto(baseUrl, { waitUntil: 'domcontentloaded' });
     await pause(1500);
@@ -148,26 +135,44 @@ describe('puppeteer visible multi-LLM flow', () => {
     }
 
     await page.waitForSelector('nav a[href="#/chat"]');
-    await page.click('nav a[href="#/chat"]');
+    await page.evaluate(() => {
+      window.location.hash = '#/chat';
+    });
 
     await page.waitForFunction(
       () => document.querySelector('#app h1')?.textContent?.trim() === 'Chat',
     );
+
+    // Force a deterministic two-model comparison for the real API run.
+    const comparedModels = ['qwen2.5:0.5b', 'qwen2.5:1.5b'];
+    await page.evaluate((models) => {
+      const wanted = new Set(models);
+      document.querySelectorAll<HTMLInputElement>('.model-select').forEach((input) => {
+        input.checked = wanted.has(input.value);
+      });
+    }, comparedModels);
 
     await page.waitForSelector('#chat-input');
     await page.type('#chat-input', 'Compare shortest path algorithms');
     await page.keyboard.press('Enter');
 
     await page.waitForFunction(
-      () => document.querySelectorAll('.multi-model-group .multi-model-card').length >= 2,
+      () => {
+        const cards = document.querySelectorAll('.multi-model-group .multi-model-card').length;
+        const hasText = Array.from(document.querySelectorAll('.multi-model-group .llm-text')).some(
+          (node) => (node.textContent || '').trim().length > 0,
+        );
+        return cards >= 2 && hasText;
+      },
+      { timeout: 120000 },
     );
 
     const labels = await page.$$eval('.multi-model-group .bubble-role', (nodes) =>
       nodes.map((n) => (n.textContent || '').trim()),
     );
 
-    expect(labels).toContain('Ollama / qwen2.5:3b');
-    expect(labels).toContain('Ollama / mistral:7b');
+    expect(labels).toContain('Ollama / qwen2.5:0.5b');
+    expect(labels).toContain('Ollama / qwen2.5:1.5b');
 
     const responseCount = await page.$$eval('.multi-model-group .llm-text', (nodes) =>
       nodes.filter((n) => (n.textContent || '').trim().length > 0).length,
