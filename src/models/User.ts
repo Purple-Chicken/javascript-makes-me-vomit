@@ -9,6 +9,8 @@ const UserSchema = new mongoose.Schema({
     lightMode: { type: Boolean, default: false },
     font: { type: String, default: 'neo-tech', enum: ['neo-tech', 'sans', 'serif'] },
     themeColor: { type: String, default: 'green', enum: ['green', 'blue', 'purple', 'amber'] },
+    multiLLM: { type: Boolean, default: false },
+    llmModels: { type: [String], default: ['qwen3:8b', 'llama3:8b', 'mistral:7b'] },
   },
 });
 

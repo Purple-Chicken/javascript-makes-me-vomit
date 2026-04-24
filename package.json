@@ -28,10 +28,12 @@
     "preview": "vite preview",
     "test": "node --import tsx --experimental-vm-modules ./node_modules/jasmine/bin/jasmine.js --config=jasmine.json",
     "puppeteer": "node --import tsx --experimental-vm-modules ./node_modules/jasmine/bin/jasmine.js --config=jasmine.puppeteer.json",
+    "puppeteer:video": "tsx tests/puppeteer-video.ts",
     "acceptance": "tsc -p tsconfig.spec.json --noEmit && node --import tsx ./node_modules/@cucumber/cucumber/bin/cucumber.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
+    "docker": "^1.0.0",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.3.0",

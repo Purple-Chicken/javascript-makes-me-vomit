@@ -147,6 +147,16 @@ const html=`
   </div>
 </div>
 `; 
+
+function updateFontSelection(font: string) {
+    // Treat legacy 'neo-tech' value as the new default 'ibm-plex'
+    const normalized = font === 'neo-tech' ? 'ibm-plex' : font;
+    document.querySelectorAll('.font-option').forEach(btn => {
+        btn.classList.toggle('selected', (btn as HTMLElement).dataset.font === normalized);
+    });
+    document.documentElement.style.setProperty('--font-family', `var(--font-${normalized})`);
+}
+
 const onLoad = () => {
     const pwdForm = document.getElementById('changepwdForm') as HTMLFormElement;
     const usernameForm = document.getElementById('changeUsernameForm') as HTMLFormElement;
@@ -171,15 +181,6 @@ const onLoad = () => {
     let selectedPic = 0;
     let selectedColor = 'green';
     let selectedFont = 'ibm-plex';
-
-    function updateFontSelection(font: string) {
-        // Treat legacy 'neo-tech' value as the new default 'ibm-plex'
-        const normalized = font === 'neo-tech' ? 'ibm-plex' : font;
-        selectedFont = normalized;
-        document.querySelectorAll('.font-option').forEach(btn => {
-            btn.classList.toggle('selected', (btn as HTMLElement).dataset.font === normalized);
-        });
-    }
 
     const authHeaders = () => ({
         'Content-Type': 'application/json',

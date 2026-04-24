@@ -20,14 +20,8 @@ const PORT = Number(process.env.PORT || '5000');
 const MONGODB_URI =
   process.env.MONGODB_URI ||
   'mongodb://admin:admin@127.0.0.1:27017/mydb?authSource=admin';
-const OLLAMA_URL = process.env.OLLAMA_URL || 'http://127.0.0.1:11434';
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'qwen3:8b';
-
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/sha257')
-  .then(() => console.log(green + 'MongoDB Connected' + endc))
-  .catch(err => console.error(red + 'MongoDB Connection Error:' + endc, err));
-
-// Middleware
+const OLLAMA_URL = process.env.OLLAMA_URL || 'http://127.0.0.1:11435';
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3.2:1b';
 app.use(express.json());
 configurePassport();
 app.use(passport.initialize()); 
@@ -128,12 +122,12 @@ app.delete('/api/users/me', authenticateJWT, async (req, res) => {
 
 // ── Chat / Conversation endpoints ──
 
-async function queryOllama(messages: { role: string; content: string }[]): Promise<string> {
+async function queryOllama(messages: { role: string; content: string }[], model: string = OLLAMA_MODEL): Promise<string> {
   const res = await fetch(`${OLLAMA_URL}/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: OLLAMA_MODEL,
+      model,
       messages,
       stream: false,
     }),
@@ -148,6 +142,16 @@ async function queryOllama(messages: { role: string; content: string }[]): Promi
   return data.message?.content?.trim() || '';
 }
 
+function formatModelName(model: string): string {
+  const normalized = model.toLowerCase();
+  if (normalized.includes('qwen3')) return 'Qwen 3 8B';
+  if (normalized.includes('llama3.2')) return 'Llama 3.2 1B';
+  if (normalized.includes('llama3')) return 'Llama 3 8B';
+  if (normalized.includes('mistral')) return 'Mistral 7B';
+  if (normalized.includes('gpt') || normalized.includes('gpt-')) return model;
+  return model;
+}
+
 // POST /api/chat  — send a message, get a random reply, persist both
 app.post('/api/chat', authenticateJWT, async (req, res) => {
   try {
@@ -156,6 +160,11 @@ app.post('/api/chat', authenticateJWT, async (req, res) => {
 
     if (!message || typeof message !== 'string') {
       return res.status(400).json({ error: 'message is required' });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
     }
 
     let conversation;
@@ -176,13 +185,30 @@ app.post('/api/chat', authenticateJWT, async (req, res) => {
       { role: 'user', content: message },
     ];
 
-    const reply = (await queryOllama(ollamaMessages)).replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+    const preferences = user.preferences || { multiLLM: false, llmModels: [] as string[] };
+    type ChatReply = { modelName: string; content: string };
+    let replies: ChatReply[];
+
+    if (preferences.multiLLM && preferences.llmModels.length >= 3) {
+      const models = preferences.llmModels.slice(0, 3);
+      const promises = models.map(model => queryOllama(ollamaMessages, model));
+      const results = await Promise.all(promises);
+      replies = results.map((reply, i) => ({
+        modelName: formatModelName(models[i]),
+        content: reply.replace(/<think>[\s\S]*?<\/think>/g, '').trim(),
+      }));
+    } else {
+      const content = (await queryOllama(ollamaMessages)).replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+      replies = [{ modelName: formatModelName(OLLAMA_MODEL), content }];
+    }
+
+    const combinedReply = replies.map(reply => `[${reply.modelName}] ${reply.content}`).join('\n\n');
 
     conversation.messages.push({ role: 'user', content: message });
-    conversation.messages.push({ role: 'assistant', content: reply });
+    conversation.messages.push({ role: 'assistant', content: combinedReply });
     await conversation.save();
 
-    res.json({ reply, conversationId: conversation._id });
+    res.json({ replies, conversationId: conversation._id });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Chat failed' });
   }
@@ -383,6 +409,35 @@ app.get('/api/conversations/:id', authenticateJWT, async (req, res) => {
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to get conversation' });
+  }
+});
+
+// GET /api/settings — get user settings
+app.get('/api/settings', authenticateJWT, async (req, res) => {
+  try {
+    const userId = (req.user as any)._id;
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    res.json(user.preferences);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to get settings' });
+  }
+});
+
+// POST /api/settings — update user settings
+app.post('/api/settings', authenticateJWT, async (req, res) => {
+  try {
+    const userId = (req.user as any)._id;
+    const { multiLLM, llmModels } = req.body;
+    await User.findByIdAndUpdate(userId, {
+      'preferences.multiLLM': multiLLM,
+      'preferences.llmModels': llmModels
+    });
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to update settings' });
   }
 });
 

@@ -4,8 +4,43 @@ const html = `
     <div class="chat-header">
       <h1 style="margin: 0; font-size: 1.5em;">Chat</h1>
     </div>
-    <div id="chat-messages">
-    </div>
+    <div id="chat-messages"></div>
+    <aside class="chat-settings-panel">
+      <button class="settings-panel-toggle" id="settings-toggle" type="button" aria-label="Toggle settings">
+        <span class="settings-panel-title">⚙ Multi-LLM</span>
+        <span class="toggle-chevron">▼</span>
+      </button>
+      <div id="settings-content" class="settings-content">
+        <label class="settings-toggle">
+          <input type="checkbox" id="multiLLM">
+          <span>Enable</span>
+        </label>
+        <div id="llm-models" class="llm-models">
+          <label for="llm1">LLM 1</label>
+          <select id="llm1">
+            <option value="llama3.2:1b">Llama 3.2 1B</option>
+            <option value="qwen3:8b">Qwen 3 8B</option>
+            <option value="llama3:8b">Llama 3 8B</option>
+            <option value="mistral:7b">Mistral 7B</option>
+          </select>
+          <label for="llm2">LLM 2</label>
+          <select id="llm2">
+            <option value="llama3.2:1b">Llama 3.2 1B</option>
+            <option value="qwen3:8b">Qwen 3 8B</option>
+            <option value="llama3:8b">Llama 3 8B</option>
+            <option value="mistral:7b">Mistral 7B</option>
+          </select>
+          <label for="llm3">LLM 3</label>
+          <select id="llm3">
+            <option value="llama3.2:1b">Llama 3.2 1B</option>
+            <option value="qwen3:8b">Qwen 3 8B</option>
+            <option value="llama3:8b">Llama 3 8B</option>
+            <option value="mistral:7b">Mistral 7B</option>
+          </select>
+        </div>
+        <button id="save-chat-settings" class="save-settings-btn" type="button">Save</button>
+      </div>
+    </aside>
     <form id="chatForm" class="chat-input-bar">
       <div class="chat-input-wrap">
         <div class="input-prompt" style="flex: 1;"><textarea id="chat-input" class="input chat-textarea" placeholder="&lt;prompt here&gt;" autocomplete="off" rows="1"></textarea></div>
@@ -27,6 +62,54 @@ function escapeHtml(s: string) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+function formatModelLabel(model: string) {
+  const normalized = model.toLowerCase();
+  if (normalized.includes('qwen3')) return 'Qwen 3 8B';
+  if (normalized.includes('llama3.2')) return 'Llama 3.2 1B';
+  if (normalized.includes('llama3')) return 'Llama 3 8B';
+  if (normalized.includes('mistral')) return 'Mistral 7B';
+  if (normalized.includes('phi3')) return 'Phi-3 3.8B';
+  return model;
+}
+
+function parseAssistantMessage(content: string, fallback: string) {
+  const match = content.match(/^\[([^\]]+)\]\s*(.*)$/s);
+  if (match) {
+    return { author: match[1], message: match[2] };
+  }
+  return { author: fallback, message: content };
+}
+
+const copyBtnSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
+
+function formatTimestamp(date: Date = new Date()) {
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function createChatMessage(role: 'user' | 'llm', content: string, timestamp?: string, author?: string) {
+  const time = timestamp || formatTimestamp();
+  const isUser = role === 'user';
+  const authorText = author || (isUser ? localStorage.getItem('cachedUsername') || 'User' : 'LLM');
+  const avatar = isUser ? '👤' : '🤖';
+  const wrapper = document.createElement('div');
+  wrapper.className = `chat-message ${isUser ? 'user' : 'llm'}`;
+  wrapper.innerHTML = `
+    <div class="chat-avatar">${avatar}</div>
+    <div class="chat-body">
+      <div class="chat-meta">
+        <span class="chat-author">${authorText}</span>
+        <span class="chat-time">${time}</span>
+      </div>
+      <div class="chat-bubble ${isUser ? 'user' : 'llm'}">
+        <button class="bubble-copy-btn" title="Copy">${copyBtnSvg}</button>
+        <div class="bubble-role">${authorText}</div>
+        <p>${escapeHtml(content)}</p>
+      </div>
+    </div>
+  `;
+  return wrapper;
+}
+
 const onLoad = () => {
   const form = document.getElementById('chatForm') as HTMLFormElement;
   const input = document.getElementById('chat-input') as HTMLTextAreaElement;
@@ -36,6 +119,67 @@ const onLoad = () => {
   let isGenerating = false;
   let abortController: AbortController | null = null;
   let currentUserMessage = '';  // track for stop persistence
+  let multiLLM = false;
+  const currentUsername = localStorage.getItem('cachedUsername') || 'User';
+
+  const multiLLMCheckbox = document.getElementById('multiLLM') as HTMLInputElement;
+  const llmModelsDiv = document.getElementById('llm-models') as HTMLDivElement;
+  const llm1 = document.getElementById('llm1') as HTMLSelectElement;
+  const llm2 = document.getElementById('llm2') as HTMLSelectElement;
+  const llm3 = document.getElementById('llm3') as HTMLSelectElement;
+  const saveSettingsBtn = document.getElementById('save-chat-settings') as HTMLButtonElement;
+  const settingsToggle = document.getElementById('settings-toggle') as HTMLButtonElement;
+  const settingsContent = document.getElementById('settings-content') as HTMLDivElement;
+
+  // Settings panel collapse/expand
+  settingsToggle?.addEventListener('click', () => {
+    settingsContent.classList.toggle('collapsed');
+    settingsToggle.classList.toggle('collapsed');
+  });
+
+  // Load settings
+  fetch('/api/settings', {
+    headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+  }).then(res => res.json()).then(settings => {
+    multiLLM = settings.multiLLM || false;
+    multiLLMCheckbox.checked = multiLLM;
+    llmModelsDiv.style.display = multiLLM ? 'block' : 'none';
+    if (settings.llmModels && settings.llmModels.length >= 3) {
+      llm1.value = settings.llmModels[0];
+      llm2.value = settings.llmModels[1];
+      llm3.value = settings.llmModels[2];
+    }
+  }).catch(() => {});
+
+  multiLLMCheckbox?.addEventListener('change', () => {
+    multiLLM = multiLLMCheckbox.checked;
+    llmModelsDiv.style.display = multiLLM ? 'block' : 'none';
+  });
+
+  saveSettingsBtn?.addEventListener('click', async () => {
+    const payload = {
+      multiLLM: multiLLMCheckbox.checked,
+      llmModels: multiLLMCheckbox.checked ? [llm1.value, llm2.value, llm3.value] : []
+    };
+
+    const res = await fetch('/api/settings', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (res.ok) {
+      multiLLM = multiLLMCheckbox.checked;
+      saveSettingsBtn.textContent = 'Saved!';
+      setTimeout(() => { saveSettingsBtn.textContent = 'Save settings'; }, 1200);
+    } else {
+      saveSettingsBtn.textContent = 'Failed';
+      setTimeout(() => { saveSettingsBtn.textContent = 'Save settings'; }, 1200);
+    }
+  });
 
   // Load current conversation id from hash or start fresh
   let activeConversationId: string | null = new URLSearchParams(location.hash.split('?')[1] || '').get('id');
@@ -49,16 +193,15 @@ const onLoad = () => {
       if (res.ok) {
         const data = await res.json();
         if (messages && Array.isArray(data.messages)) {
-          const copyBtn = `<button class="bubble-copy-btn" title="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>`;
-          messages.innerHTML = data.messages.map((m: { role: string; content: string }) => {
-            const cls = m.role === 'user' ? 'user' : 'llm';
-            const label = m.role === 'user' ? 'You' : 'LLM';
-            const copy = copyBtn;
-            const bubbleContent = m.role === 'user'
-              ? `<div class="chat-bubble ${cls}">${copy}<div class="bubble-role">${label}</div><p>${escapeHtml(m.content)}</p></div>`
-              : `${copy}<div class="chat-bubble ${cls}"><div class="bubble-role">${label}</div><p>${escapeHtml(m.content)}</p></div>`;
-            return `<div class="chat-message ${cls}">${bubbleContent}</div>`;
-          }).join('');
+          messages.innerHTML = '';
+          data.messages.forEach((m: { role: string; content: string }) => {
+            if (m.role === 'user') {
+              messages.appendChild(createChatMessage('user', m.content, undefined, currentUsername));
+            } else {
+              const parsed = parseAssistantMessage(m.content, formatModelLabel((llm1.value || '').trim() || 'LLM'));
+              messages.appendChild(createChatMessage('llm', parsed.message, undefined, parsed.author));
+            }
+          });
           messages.scrollTo(0, messages.scrollHeight);
         }
       }
@@ -177,31 +320,27 @@ const onLoad = () => {
     const hint = messages?.querySelector('.start-hint');
     if (hint) hint.remove();
 
-    const copyBtnSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
-
-    // Append user bubble
-    const userMessage = document.createElement('div');
-    userMessage.className = 'chat-message user';
-    userMessage.innerHTML = `<div class="chat-bubble user"><button class="bubble-copy-btn" title="Copy">${copyBtnSvg}</button><div class="bubble-role">You</div><p>${escapeHtml(text)}</p></div>`;
+    const userMessage = createChatMessage('user', text, undefined, currentUsername);
     messages?.appendChild(userMessage);
     input.value = '';
     input.style.height = 'auto';
     sendBtn.style.display = 'none';
     messages?.scrollTo(0, messages.scrollHeight);
 
+    const currentModelName = formatModelLabel(llm1.value || OLLAMA_MODEL);
+
     // Create LLM bubble with spinner
-    const llmMessage = document.createElement('div');
-    llmMessage.className = 'chat-message llm';
-    llmMessage.innerHTML = `<button class="bubble-copy-btn" title="Copy">${copyBtnSvg}</button><div class="chat-bubble llm"><div class="bubble-role">LLM</div><div class="thinking-section" style="display:none;"><button class="thinking-toggle" type="button"><span class="spinner"></span> Thinking…</button><div class="thinking-content" style="display:none;"></div></div><div class="llm-spinner"><span class="spinner"></span></div><p class="llm-text"></p></div>`;
-    messages?.appendChild(llmMessage);
+    const llmMessage = createChatMessage('llm', '', undefined, currentModelName);
     const llmBubble = llmMessage.querySelector('.chat-bubble') as HTMLElement;
+    llmBubble.insertAdjacentHTML('beforeend', `<div class="thinking-section" style="display:none;"><button class="thinking-toggle" type="button"><span class="spinner"></span> Thinking…</button><div class="thinking-content" style="display:none;"></div></div><div class="llm-spinner"><span class="spinner"></span></div>`);
+    messages?.appendChild(llmMessage);
     messages?.scrollTo(0, messages.scrollHeight);
 
     const thinkingSection = llmBubble.querySelector('.thinking-section') as HTMLElement;
     const thinkingToggle = llmBubble.querySelector('.thinking-toggle') as HTMLElement;
     const thinkingContent = llmBubble.querySelector('.thinking-content') as HTMLElement;
     const spinnerEl = llmBubble.querySelector('.llm-spinner') as HTMLElement;
-    const textEl = llmBubble.querySelector('.llm-text') as HTMLElement;
+    const textEl = llmBubble.querySelector('p') as HTMLElement;
 
     // Toggle thinking visibility
     thinkingToggle?.addEventListener('click', () => {
@@ -209,6 +348,49 @@ const onLoad = () => {
       thinkingContent.style.display = isOpen ? 'none' : 'block';
       thinkingToggle.classList.toggle('open', !isOpen);
     });
+
+    const multiLLMEnabled = multiLLMCheckbox.checked;
+    if (multiLLMEnabled) {
+      // Use non-streaming API for multi-LLM
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          },
+          body: JSON.stringify({ message: text, conversationId: activeConversationId })
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data.replies && Array.isArray(data.replies)) {
+            data.replies.forEach((reply: { modelName: string; content: string }) => {
+              const llmMessage = createChatMessage('llm', reply.content, undefined, reply.modelName);
+              messages.appendChild(llmMessage);
+            });
+          } else {
+            const llmMessage = createChatMessage('llm', 'No response', undefined, currentModelName);
+            messages.appendChild(llmMessage);
+          }
+          activeConversationId = data.conversationId;
+          window.dispatchEvent(new CustomEvent('sidebar:refresh', { detail: { activeId: activeConversationId } }));
+          llmMessage.remove();
+        } else {
+          const errorMessage = createChatMessage('llm', 'Error getting response.', undefined, currentModelName);
+          messages.appendChild(errorMessage);
+          llmMessage.remove();
+        }
+      } catch (err) {
+        const errorMessage = createChatMessage('llm', 'Error getting response.', undefined, currentModelName);
+        messages.appendChild(errorMessage);
+        llmMessage.remove();
+      }
+      spinnerEl.style.display = 'none';
+      isGenerating = false;
+      sendBtn.style.display = input.value.trim() ? '' : 'none';
+      return;
+    }
 
     try {
       const res = await fetch('/api/chat/stream', {

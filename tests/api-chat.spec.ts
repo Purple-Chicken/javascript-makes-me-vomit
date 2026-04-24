@@ -176,4 +176,45 @@ describe('Chat API', () => {
     const getRes = await apiRequest(`/api/chats/${chatId}`, { method: 'GET' }, userToken);
     expect(getRes.status).toBe(404);
   });
+
+  it('gets user settings', async () => {
+    const res = await apiRequest('/api/settings', { method: 'GET' }, userToken);
+    expect(res.status).toBe(200);
+    expect(res.body).toBeDefined();
+    expect(res.body.multiLLM).toBeDefined();
+  });
+
+  it('updates user settings', async () => {
+    const update = { multiLLM: true, llmModels: ['qwen3:8b', 'llama3:8b', 'mistral:7b'] };
+    const res = await apiRequest('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(update)
+    }, userToken);
+    expect(res.status).toBe(200);
+
+    // Verify
+    const getRes = await apiRequest('/api/settings', { method: 'GET' }, userToken);
+    expect(getRes.body.multiLLM).toBe(true);
+    expect(getRes.body.llmModels).toEqual(['qwen3:8b', 'llama3:8b', 'mistral:7b']);
+  });
+
+  it('sends message with multi-LLM enabled', async () => {
+    // Enable multi-LLM
+    await apiRequest('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ multiLLM: true, llmModels: ['qwen3:8b', 'llama3:8b', 'mistral:7b'] })
+    }, userToken);
+
+    const res = await apiRequest('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: 'Hello' })
+    }, userToken);
+    expect(res.status).toBe(200);
+    expect(res.body.reply).toContain('[LLM1]');
+    expect(res.body.reply).toContain('[LLM2]');
+    expect(res.body.reply).toContain('[LLM3]');
+  });
 });
