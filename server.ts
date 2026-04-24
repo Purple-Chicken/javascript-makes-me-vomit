@@ -21,7 +21,18 @@ const MONGODB_URI =
   process.env.MONGODB_URI ||
   'mongodb://admin:admin@127.0.0.1:27017/mydb?authSource=admin';
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://127.0.0.1:11434';
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'qwen3:8b';
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'qwen2.5:0.5b';
+
+type SelectedModel = { provider: string; model: string };
+
+const DEFAULT_AVAILABLE_MODELS: SelectedModel[] = [
+  { provider: 'Ollama', model: 'qwen2.5:0.5b' },
+  { provider: 'Ollama', model: 'qwen2.5:1.5b' },
+  { provider: 'Ollama', model: 'tinyllama:1.1b' },
+  { provider: 'Ollama', model: 'qwen2.5:3b' },
+  { provider: 'Ollama', model: 'mistral:7b' },
+  { provider: 'Ollama', model: 'llama3.1:8b' },
+];
 
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/sha257')
   .then(() => console.log(green + 'MongoDB Connected' + endc))
@@ -63,6 +74,15 @@ app.get('/api/users/me', authenticateJWT, (req, res) => {
   res.json(req.user);
 });
 
+app.get('/api/models', authenticateJWT, (_req, res) => {
+  const models = DEFAULT_AVAILABLE_MODELS.map((m) => ({
+    id: `${m.provider.toLowerCase()}/${m.model}`,
+    provider: m.provider,
+    model: m.model,
+  }));
+  res.json(models);
+});
+
 app.patch('/api/users/me', authenticateJWT, async (req, res) => {
   try {
     const user = req.user as any;
@@ -101,6 +121,11 @@ app.patch('/api/users/me', authenticateJWT, async (req, res) => {
       if (typeof preferences.lightMode === 'boolean') updates['preferences.lightMode'] = preferences.lightMode;
       if (validFonts.includes(preferences.font)) updates['preferences.font'] = preferences.font;
       if (validColors.includes(preferences.themeColor)) updates['preferences.themeColor'] = preferences.themeColor;
+      if (Array.isArray(preferences.defaultModelSet)) {
+        updates['preferences.defaultModelSet'] = preferences.defaultModelSet
+          .filter((m: any) => m && typeof m.model === 'string' && m.model.trim())
+          .map((m: any) => ({ provider: String(m.provider || 'Ollama'), model: String(m.model) }));
+      }
     }
 
     if (Object.keys(updates).length === 0) {
@@ -128,12 +153,12 @@ app.delete('/api/users/me', authenticateJWT, async (req, res) => {
 
 // ── Chat / Conversation endpoints ──
 
-async function queryOllama(messages: { role: string; content: string }[]): Promise<string> {
+async function queryOllama(messages: { role: string; content: string }[], model: string = OLLAMA_MODEL): Promise<string> {
   const res = await fetch(`${OLLAMA_URL}/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: OLLAMA_MODEL,
+      model,
       messages,
       stream: false,
     }),
@@ -148,11 +173,48 @@ async function queryOllama(messages: { role: string; content: string }[]): Promi
   return data.message?.content?.trim() || '';
 }
 
+function parseSelectedModels(input: unknown): SelectedModel[] {
+  if (!Array.isArray(input)) return [];
+  return input
+    .map((entry) => {
+      if (typeof entry === 'string') {
+        return { provider: 'Ollama', model: entry };
+      }
+      if (entry && typeof entry === 'object' && typeof (entry as any).model === 'string') {
+        return {
+          provider: String((entry as any).provider || 'Ollama'),
+          model: String((entry as any).model),
+        };
+      }
+      return null;
+    })
+    .filter((m): m is SelectedModel => !!m && !!m.model.trim());
+}
+
+function resolveSelectedModels(user: any, conversation: any, requestModels: unknown): SelectedModel[] {
+  const requested = parseSelectedModels(requestModels);
+  if (requested.length) return requested;
+  if (Array.isArray(conversation?.selectedModels) && conversation.selectedModels.length) {
+    return conversation.selectedModels.map((m: any) => ({
+      provider: String(m.provider || 'Ollama'),
+      model: String(m.model),
+    }));
+  }
+  if (Array.isArray(user?.preferences?.defaultModelSet) && user.preferences.defaultModelSet.length) {
+    return user.preferences.defaultModelSet.map((m: any) => ({
+      provider: String(m.provider || 'Ollama'),
+      model: String(m.model),
+    }));
+  }
+  return [{ provider: 'Ollama', model: OLLAMA_MODEL }];
+}
+
 // POST /api/chat  — send a message, get a random reply, persist both
 app.post('/api/chat', authenticateJWT, async (req, res) => {
   try {
-    const { message, conversationId } = req.body;
+    const { message, conversationId, selectedModels } = req.body;
     const userId = (req.user as any)._id;
+    const user = req.user as any;
 
     if (!message || typeof message !== 'string') {
       return res.status(400).json({ error: 'message is required' });
@@ -170,19 +232,57 @@ app.post('/api/chat', authenticateJWT, async (req, res) => {
       conversation = new Conversation({ userId, title, messages: [] });
     }
 
+    const activeModels = resolveSelectedModels(user, conversation, selectedModels);
+    (conversation as any).selectedModels = activeModels;
+
     // Build the message history for Ollama (full conversation context)
     const ollamaMessages = [
       ...conversation.messages.map((m: any) => ({ role: m.role, content: m.content })),
       { role: 'user', content: message },
     ];
 
-    const reply = (await queryOllama(ollamaMessages)).replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+    const responses = await Promise.all(activeModels.map(async (m) => {
+      try {
+        const content = (await queryOllama(ollamaMessages, m.model)).replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+        return { provider: m.provider, model: m.model, content };
+      } catch (err: any) {
+        return { provider: m.provider, model: m.model, error: err.message || 'Provider unavailable' };
+      }
+    }));
+
+    const successes = responses.filter((r: any) => !r.error && r.content);
+    const errors = responses.filter((r: any) => r.error).map((r: any) => ({
+      provider: r.provider,
+      model: r.model,
+      message: r.error,
+      nonBlocking: true,
+    }));
 
     conversation.messages.push({ role: 'user', content: message });
-    conversation.messages.push({ role: 'assistant', content: reply });
+    for (const reply of successes as any[]) {
+      conversation.messages.push({
+        role: 'assistant',
+        content: reply.content,
+        modelMetadata: { provider: reply.provider, model: reply.model },
+      });
+    }
     await conversation.save();
 
-    res.json({ reply, conversationId: conversation._id });
+    if (!successes.length) {
+      return res.status(502).json({
+        error: 'All selected models failed',
+        errors,
+        conversationId: conversation._id,
+      });
+    }
+
+    res.json({
+      reply: (successes[0] as any).content,
+      responses: successes,
+      errors,
+      selectedModels: activeModels,
+      conversationId: conversation._id,
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Chat failed' });
   }
@@ -192,8 +292,9 @@ app.post('/api/chat', authenticateJWT, async (req, res) => {
 app.post('/api/chat/stream', authenticateJWT, async (req, res) => {
   let conversation: any;
   try {
-    const { message, conversationId } = req.body;
+    const { message, conversationId, selectedModels } = req.body;
     const userId = (req.user as any)._id;
+    const user = req.user as any;
 
     if (!message || typeof message !== 'string') {
       return res.status(400).json({ error: 'message is required' });
@@ -215,6 +316,46 @@ app.post('/api/chat/stream', authenticateJWT, async (req, res) => {
       { role: 'user', content: message },
     ];
 
+    const activeModels = resolveSelectedModels(user, conversation, selectedModels);
+    (conversation as any).selectedModels = activeModels;
+
+    if (activeModels.length > 1) {
+      res.setHeader('Content-Type', 'application/x-ndjson');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('X-Conversation-Id', String(conversation._id));
+      res.flushHeaders();
+      res.write(JSON.stringify({ init: true, conversationId: String(conversation._id) }) + '\n');
+
+      const multiResults = await Promise.all(activeModels.map(async (m) => {
+        try {
+          const content = (await queryOllama(ollamaMessages, m.model)).replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+          return { provider: m.provider, model: m.model, content };
+        } catch (err: any) {
+          return { provider: m.provider, model: m.model, error: err.message || 'Provider unavailable' };
+        }
+      }));
+
+      conversation.messages.push({ role: 'user', content: message });
+      for (const r of multiResults as any[]) {
+        if (r.error) {
+          res.write(JSON.stringify({ model: r.model, provider: r.provider, error: r.error }) + '\n');
+          continue;
+        }
+        conversation.messages.push({
+          role: 'assistant',
+          content: r.content,
+          modelMetadata: { provider: r.provider, model: r.model },
+        });
+        // Send one model-scoped update chunk; frontend can render per-model cards.
+        res.write(JSON.stringify({ model: r.model, provider: r.provider, token: r.content, doneModel: true }) + '\n');
+      }
+
+      await conversation.save();
+      res.write(JSON.stringify({ done: true, conversationId: conversation._id }) + '\n');
+      res.end();
+      return;
+    }
+
     // Track client disconnect to abort Ollama and skip saving
     let clientDisconnected = false;
     const abortController = new AbortController();
@@ -235,7 +376,7 @@ app.post('/api/chat/stream', authenticateJWT, async (req, res) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: OLLAMA_MODEL,
+        model: activeModels[0]?.model || OLLAMA_MODEL,
         messages: ollamaMessages,
         stream: true,
       }),
@@ -301,7 +442,14 @@ app.post('/api/chat/stream', authenticateJWT, async (req, res) => {
       const reply = fullContent.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
 
       conversation.messages.push({ role: 'user', content: message });
-      conversation.messages.push({ role: 'assistant', content: reply });
+      conversation.messages.push({
+        role: 'assistant',
+        content: reply,
+        modelMetadata: {
+          provider: activeModels[0]?.provider || 'Ollama',
+          model: activeModels[0]?.model || OLLAMA_MODEL,
+        },
+      });
       await conversation.save();
 
       res.write(JSON.stringify({ done: true, conversationId: conversation._id }) + '\n');
@@ -379,6 +527,7 @@ app.get('/api/conversations/:id', authenticateJWT, async (req, res) => {
       id: conversation._id,
       title: conversation.title,
       updatedAt: conversation.updatedAt,
+      selectedModels: conversation.selectedModels || [],
       messages: conversation.messages,
     });
   } catch (err: any) {

@@ -15,6 +15,15 @@ const PROFILE_PICS_SMALL = [
   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24"><path d="M4 10l2-6 4 3h4l4-3 2 6"/><ellipse cx="12" cy="15" rx="7" ry="5"/><circle cx="10" cy="14" r="1"/><circle cx="14" cy="14" r="1"/><path d="M11 16.5l1 0.5 1-0.5"/></svg>`,
 ];
 
+const AVAILABLE_MODELS = [
+  { provider: 'Ollama', model: 'qwen2.5:0.5b' },
+  { provider: 'Ollama', model: 'qwen2.5:1.5b' },
+  { provider: 'Ollama', model: 'tinyllama:1.1b' },
+  { provider: 'Ollama', model: 'qwen2.5:3b' },
+  { provider: 'Ollama', model: 'mistral:7b' },
+  { provider: 'Ollama', model: 'llama3.1:8b' },
+];
+
 const html=`
 <h1>Account Settings</h1>
 <div class="account-page">
@@ -112,6 +121,20 @@ const html=`
     <button id="save-appearance-btn" class="button" style="margin-top: 12px; display: none;">Save Appearance</button>
   </div>
 
+  <!-- MODEL DEFAULTS SECTION -->
+  <div class="box-container" style="margin-bottom: 20px;">
+    <h2 class="text-center">Model Defaults</h2>
+    <p style="margin: 0 0 16px; text-align: left;">Choose the models that should be preselected when you start a new chat.</p>
+
+    <form id="default-models-form">
+      <div style="display: flex; flex-direction: column; gap: 10px; align-items: flex-start;">
+        ${AVAILABLE_MODELS.map((m) => `<label style="display: flex; align-items: center; gap: 10px;"><input type="checkbox" class="default-model-select" value="${m.model}"><span>${m.provider} / ${m.model}</span></label>`).join('')}
+      </div>
+      <span id="default-models-error" class="error-message" style="display: block; min-height: 1.2em; margin-top: 10px;"></span>
+      <button class="button" type="submit" style="margin-top: 12px;">Save Default Model Set</button>
+    </form>
+  </div>
+
   <!-- DANGER ZONE -->
   <div class="box-container">
     <div style="display: flex; gap: 12px; justify-content: center;">
@@ -147,6 +170,37 @@ const html=`
   </div>
 </div>
 `; 
+
+function readCachedPreferences() {
+    try {
+        return JSON.parse(localStorage.getItem('userPreferences') || '{}');
+    } catch {
+        return {};
+    }
+}
+
+function normalizeDefaultModels(models: unknown) {
+    if (!Array.isArray(models)) return [] as Array<{ provider: string; model: string }>;
+    return models
+        .map((model) => {
+            if (!model || typeof model !== 'object' || typeof (model as any).model !== 'string') {
+                return null;
+            }
+            return {
+                provider: String((model as any).provider || 'Ollama'),
+                model: String((model as any).model),
+            };
+        })
+        .filter((model): model is { provider: string; model: string } => Boolean(model && model.model.trim()));
+}
+
+function updateDefaultModelSelection(inputs: HTMLInputElement[], models: Array<{ provider?: string; model?: string }>) {
+    const selected = new Set(models.map((m) => m.model).filter(Boolean));
+    inputs.forEach((input) => {
+        input.checked = selected.has(input.value);
+    });
+}
+
 const onLoad = () => {
     const pwdForm = document.getElementById('changepwdForm') as HTMLFormElement;
     const usernameForm = document.getElementById('changeUsernameForm') as HTMLFormElement;
@@ -167,6 +221,11 @@ const onLoad = () => {
     const saveAppearanceBtn = document.getElementById('save-appearance-btn');
     const matrixRainCheckbox = document.getElementById('pref-matrix-rain') as HTMLInputElement;
     const lightModeCheckbox = document.getElementById('pref-light-mode') as HTMLInputElement;
+    const defaultModelsForm = document.getElementById('default-models-form') as HTMLFormElement | null;
+    const defaultModelsError = document.getElementById('default-models-error');
+    const defaultModelInputs = typeof document.querySelectorAll === 'function'
+        ? Array.from(document.querySelectorAll<HTMLInputElement>('.default-model-select'))
+        : [];
 
     let selectedPic = 0;
     let selectedColor = 'green';
@@ -188,20 +247,58 @@ const onLoad = () => {
 
     // Fetch user details and fill fields
     (async () => {
-        const res = await fetch('/api/users/me', { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } });
-        if (res.ok) {
-            const user = await res.json();
-            if (usernameInput) usernameInput.value = user.username || '';
-            selectedPic = user.profilePic ?? 0;
-            updatePicSelection(selectedPic);
-            const prefs = user.preferences || {};
-            if (matrixRainCheckbox) matrixRainCheckbox.checked = prefs.matrixRain !== false;
-            if (lightModeCheckbox) lightModeCheckbox.checked = prefs.lightMode === true;
-            updateFontSelection(prefs.font || 'ibm-plex');
-            selectedColor = prefs.themeColor || 'green';
-            updateColorSelection(selectedColor);
+        try {
+            const res = await fetch('/api/users/me', { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } });
+            if (res.ok && typeof (res as any).json === 'function') {
+                const user = await res.json();
+                if (usernameInput) usernameInput.value = user.username || '';
+                selectedPic = user.profilePic ?? 0;
+                updatePicSelection(selectedPic);
+                const prefs = user.preferences || {};
+                localStorage.setItem('userPreferences', JSON.stringify(prefs));
+                if (matrixRainCheckbox) matrixRainCheckbox.checked = prefs.matrixRain !== false;
+                if (lightModeCheckbox) lightModeCheckbox.checked = prefs.lightMode === true;
+                updateFontSelection(prefs.font || 'ibm-plex');
+                selectedColor = prefs.themeColor || 'green';
+                updateColorSelection(selectedColor);
+                updateDefaultModelSelection(defaultModelInputs, normalizeDefaultModels(prefs.defaultModelSet));
+            }
+        } catch {
+            // Ignore in tests/non-network contexts; form remains at defaults.
         }
     })();
+
+    defaultModelsForm?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const selectedDefaults = defaultModelInputs
+            .filter((input) => input.checked)
+            .map((input) => ({ provider: 'Ollama', model: input.value }));
+
+        if (!selectedDefaults.length) {
+            if (defaultModelsError) defaultModelsError.textContent = 'Select at least one model to save a default set.';
+            return;
+        }
+
+        const nextPreferences = {
+            ...readCachedPreferences(),
+            defaultModelSet: selectedDefaults,
+        };
+
+        const res = await fetch('/api/users/me', {
+            method: 'PATCH',
+            headers: authHeaders(),
+            body: JSON.stringify({ preferences: nextPreferences }),
+        });
+
+        if (res.ok) {
+            localStorage.setItem('userPreferences', JSON.stringify(nextPreferences));
+            if (defaultModelsError) defaultModelsError.textContent = 'Default model set saved.';
+            return;
+        }
+
+        const data = await res.json().catch(() => ({}));
+        if (defaultModelsError) defaultModelsError.textContent = data.error || 'Failed to save default model set.';
+    });
 
     // Profile picture chooser
     function updatePicSelection(pic: number) {
@@ -246,6 +343,7 @@ const onLoad = () => {
     // Helper: gather current prefs, apply instantly, and save to server
     async function saveAndApplyAppearance() {
         const prefs = {
+            ...readCachedPreferences(),
             matrixRain: matrixRainCheckbox?.checked ?? true,
             lightMode: lightModeCheckbox?.checked ?? false,
             font: selectedFont,
@@ -351,7 +449,6 @@ function applyTheme(prefs: { matrixRain?: boolean; lightMode?: boolean; font?: s
 
 function resetTheme() {
     localStorage.removeItem('userPreferences');
-    updateFontSelection('ibm-plex');
     (window as any).__applyTheme?.({ matrixRain: true, lightMode: false, font: 'ibm-plex', themeColor: 'green' });
 }
 

@@ -2,6 +2,20 @@
 
 As of now, our application is an **SPA**, or **S**ingle **P**age **A**pplication. This lets us dynamically change the content without having to reload the entire page. 
 
+## Current Implemented Routes
+
+The current routes registered in `src/router.ts` and backed by files in `src/routes/` are:
+
+- `#/` -> `src/routes/home.ts`
+- `#/login` -> `src/routes/login.ts`
+- `#/signup` -> `src/routes/signup.ts`
+- `#/chat` -> `src/routes/chat.ts`
+- `#/account` -> `src/routes/account.ts`
+- `#/settings` -> `src/routes/settings.ts`
+- `#/history` -> `src/routes/history.ts`
+
+These are the route names that should be used in feature/design docs (including `docs/multi-llm-chat-report.tex`) unless new routes are added to `src/router.ts`.
+
 ## How to Use 
 
 To add a new page, simply add your page into `src/routes/[your-page].ts`, import the file into `src/router.ts`: 

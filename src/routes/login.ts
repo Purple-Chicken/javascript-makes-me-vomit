@@ -29,10 +29,14 @@ const html=`
 const onLoad = () => {
     const form = document.getElementById('loginForm') as HTMLFormElement;
 
-    const prefill = sessionStorage.getItem('prefill-username');
+    const prefill = typeof sessionStorage !== 'undefined'
+      ? sessionStorage.getItem('prefill-username')
+      : null;
     if (prefill) {
       (document.getElementById('username') as HTMLInputElement).value = prefill;
-      sessionStorage.removeItem('prefill-username');
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.removeItem('prefill-username');
+      }
     }
 
     document.getElementById('forgot-password')?.addEventListener('click', (e) => {

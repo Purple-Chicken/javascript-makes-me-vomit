@@ -1,9 +1,10 @@
-// src/routes/settings.ts 
-//
-// A toggleable sidebar with various settings. Never displayed as a main page. 
+// src/routes/settings.ts
 const html = `
-  <h1>Settings</h1>
-  <p>Switches and knobs to make your experience at home.</p>
+  <div class="box-container settings-page">
+    <h1>Settings</h1>
+    <p style="margin-bottom: 18px;">The default model set setting now lives in <strong>Account Settings</strong>.</p>
+    <a href="#/account" class="button" style="text-decoration: none; display: inline-flex; align-items: center; justify-content: center;">Open Account Settings</a>
+  </div>
 `;
 
 export default { html };

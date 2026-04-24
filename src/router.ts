@@ -39,18 +39,25 @@ const TOPBAR_ICONS = [
 ];
 
 const renderPage = (app: AppLike, html: string): Promise<void> => {
-  const appElement = app as HTMLElement;
+  const appElement = app as Partial<HTMLElement>;
+  const style = (appElement as any)?.style as { opacity?: string } | undefined;
+
+  // Test stubs may not be HTMLElements; render immediately without transition.
+  if (!style) {
+    app.innerHTML = html;
+    return Promise.resolve();
+  }
 
   return new Promise((resolve) => {
     // Fade out
-    appElement.style.opacity = '0';
+    style.opacity = '0';
 
     // Wait for fade out to complete, then swap content and fade in
     setTimeout(() => {
       app.innerHTML = html;
       // Force reflow to ensure opacity 0 is applied before setting to 1
-      void appElement.offsetHeight;
-      appElement.style.opacity = '1';
+      void (appElement as HTMLElement).offsetHeight;
+      style.opacity = '1';
       // Resolve after fade in is triggered
       resolve();
     }, 200);
@@ -84,6 +91,14 @@ export async function router(app: AppLike, path: string, modules: Record<string,
   }
 
   const targetModule = modules[path] || modules['404'];
+
+  if (path === '/') {
+    const isLoggedIn = await checkAuth();
+    if (isLoggedIn) {
+      window.location.hash = '#/chat';
+      return;
+    }
+  }
 
   if (targetModule.protected) {
     const isLoggedIn = await checkAuth();
@@ -162,14 +177,20 @@ export async function handleRoute() {
   }
 
   // Track current route on body for CSS targeting (e.g. light-mode backdrop)
-  document.body.dataset.route = path;
+  if (document.body?.dataset) {
+    document.body.dataset.route = path;
+  }
 
   // Update nav active state
-  const navLinks = document.querySelectorAll('nav a');
-  navLinks.forEach(link => link.classList.remove('active'));
-  const activeLink = document.querySelector(`nav a[data-route="${path}"]`);
-  if (activeLink) {
-    activeLink.classList.add('active');
+  if (typeof document.querySelectorAll === 'function') {
+    const navLinks = document.querySelectorAll('nav a');
+    navLinks.forEach(link => link.classList.remove('active'));
+  }
+  if (typeof document.querySelector === 'function') {
+    const activeLink = document.querySelector(`nav a[data-route="${path}"]`);
+    if (activeLink) {
+      activeLink.classList.add('active');
+    }
   }
 
   // Swap Chat / New Chat button depending on current page
@@ -223,12 +244,12 @@ async function loadSidebarChats(activeId?: string) {
   }
 }
 
-window.addEventListener('sidebar:refresh', (e: Event) => {
-  const activeId = (e as CustomEvent).detail?.activeId;
-  loadSidebarChats(activeId);
-});
-
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+  window.addEventListener('sidebar:refresh', (e: Event) => {
+    const activeId = (e as CustomEvent).detail?.activeId;
+    loadSidebarChats(activeId);
+  });
+
   // Global theme applicator — called from account page and on load
   (window as any).__applyTheme = (prefs: { matrixRain?: boolean; lightMode?: boolean; font?: string; themeColor?: string }) => {
     const body = document.body;

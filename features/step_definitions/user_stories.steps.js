@@ -142,6 +142,11 @@ Given('I have previously logged in', () => {
 
 Given('my session cookie is still valid', () => { });
 
+Given('my token is still valid', () => {
+  authState.sessionValid = true;
+  storage.token = 'remembered-token';
+});
+
 When('I navigate to the home page', async () => {
   await navigateTo('/');
 });

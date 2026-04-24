@@ -105,12 +105,12 @@ describe('user account API', () => {
       {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: newPassword }),
+        body: JSON.stringify({ oldPassword, newPassword }),
       },
       token,
     );
     expect(changePassword.status).toBe(200);
-    expect(changePassword.body.message).toContain('Password updated');
+    expect(changePassword.body.message).toContain('Account updated');
 
     const loginWithOld = await apiRequest('/api/sessions', {
       method: 'POST',
@@ -125,6 +125,47 @@ describe('user account API', () => {
       body: JSON.stringify({ username, password: newPassword }),
     });
     expect(loginWithNew.status).toBe(200);
+  });
+
+  it('saves a default model set with PATCH /api/users/me', async () => {
+    const username = `api_spec_defaults_${Date.now()}`;
+    const password = 'default-pass-123';
+
+    await apiRequest('/api/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+
+    const login = await apiRequest('/api/sessions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    const token = login.body.token as string;
+    expect(login.status).toBe(200);
+
+    const defaultModelSet = [
+      { provider: 'Ollama', model: 'qwen2.5:3b' },
+      { provider: 'Ollama', model: 'mistral:7b' },
+    ];
+
+    const update = await apiRequest(
+      '/api/users/me',
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ preferences: { defaultModelSet } }),
+      },
+      token,
+    );
+
+    expect(update.status).toBe(200);
+    expect(update.body.message).toContain('Account updated');
+
+    const profile = await apiRequest('/api/users/me', {}, token);
+    expect(profile.status).toBe(200);
+    expect(profile.body.preferences.defaultModelSet).toEqual(defaultModelSet);
   });
 
   it('deletes an account with DELETE /api/users/me', async () => {

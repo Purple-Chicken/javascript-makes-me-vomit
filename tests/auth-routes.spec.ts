@@ -87,6 +87,7 @@ describe('signup route', () => {
   let confirmInput: { value: string; addEventListener: (event: string, handler: () => void) => void };
   let passwordError: { textContent: string };
   let matchError: { textContent: string };
+  let signupSuccess: { style: { display: string } };
 
   beforeEach(() => {
     submitHandler = null;
@@ -108,6 +109,7 @@ describe('signup route', () => {
     };
     passwordError = { textContent: '' };
     matchError = { textContent: '' };
+    signupSuccess = { style: { display: 'none' } };
 
     (globalThis as any).document = {
       getElementById: (id: string) => {
@@ -117,12 +119,18 @@ describe('signup route', () => {
         if (id === 'password-confirm') return confirmInput;
         if (id === 'password-error') return passwordError;
         if (id === 'match-error') return matchError;
+        if (id === 'signup-success') return signupSuccess;
         return null;
       },
     };
     (globalThis as any).window = { location: { hash: '#/signup' } };
     (globalThis as any).location = (globalThis as any).window.location;
     (globalThis as any).alert = jasmine.createSpy('alert');
+    (globalThis as any).sessionStorage = {
+      setItem: jasmine.createSpy('setItem'),
+      getItem: jasmine.createSpy('getItem').and.returnValue(null),
+      removeItem: jasmine.createSpy('removeItem'),
+    };
   });
 
   afterEach(() => {
@@ -130,10 +138,15 @@ describe('signup route', () => {
     delete (globalThis as any).window;
     delete (globalThis as any).location;
     delete (globalThis as any).alert;
+    delete (globalThis as any).sessionStorage;
   });
 
-  it('posts credentials, alerts success, and redirects on success', async () => {
+  it('posts credentials, stores prefill username, and redirects on success', async () => {
     const fetchSpy = spyOn(globalThis as any, 'fetch').and.resolveTo({ ok: true } as Response);
+    const setTimeoutSpy = (spyOn(globalThis as any, 'setTimeout') as any).and.callFake((cb: any) => {
+      if (typeof cb === 'function') cb();
+      return 0 as any;
+    });
 
     signupModule.onLoad?.();
     await submitHandler?.({ preventDefault: () => {} });
@@ -144,7 +157,9 @@ describe('signup route', () => {
     }));
     const [, options] = fetchSpy.calls.mostRecent().args as [string, { body: string }];
     expect(options.body).toBe(JSON.stringify({ username: 'bob', password: 'secret123' }));
-    expect((globalThis as any).alert).toHaveBeenCalledWith('Account created! Please log in.');
+    expect((globalThis as any).sessionStorage.setItem).toHaveBeenCalledWith('prefill-username', 'bob');
+    expect(signupSuccess.style.display).toBe('block');
+    expect(setTimeoutSpy).toHaveBeenCalled();
     expect((globalThis as any).window.location.hash).toBe('#/login');
   });
 

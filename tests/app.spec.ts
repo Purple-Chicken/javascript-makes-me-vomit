@@ -138,18 +138,18 @@ describe('mongo database', () => {
 });
 
 describe('routing status', () => {
-  it('returns a valid page for known routes and 404 for unknown routes', () => {
+  it('returns a valid page for known routes and 404 for unknown routes', async () => {
     const app = { innerHTML: '' };
     const modules = {
       '/valid': { html: '<h1>200 OK</h1>' },
       '404': { html: '<h1>404</h1>' },
     };
 
-    router(app as any, '/valid', modules as any);
+    await router(app as any, '/valid', modules as any);
     expect(app.innerHTML).toContain('200 OK');
     expect(app.innerHTML).not.toContain('404');
 
-    router(app as any, '/missing', modules as any);
+    await router(app as any, '/missing', modules as any);
     expect(app.innerHTML).toContain('404');
   });
 });
@@ -180,15 +180,15 @@ describe('button navigation', () => {
     delete (globalThis as any).location;
   });
 
-  it('redirects correctly when a button click updates the hash', () => {
-    const button = { onclick: null as null | (() => void) };
+  it('redirects correctly when a button click updates the hash', async () => {
+    const button = { onclick: null as null | (() => Promise<void>) };
 
     button.onclick = () => {
       (globalThis as any).location.hash = '#/login';
-      handleRoute();
+      return handleRoute();
     };
 
-    button.onclick();
+    await button.onclick();
 
     const app = (globalThis as any).document.getElementById('app');
     expect(app.innerHTML).toContain('Login');

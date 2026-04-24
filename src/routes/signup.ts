@@ -44,7 +44,9 @@ const onLoad = () => {
       } else if (passwordError) {
         passwordError.textContent = '';
       }
-      if (confirmInput.value.length > 0 && passwordInput.value !== confirmInput.value) {
+      const confirmValue = typeof confirmInput?.value === 'string' ? confirmInput.value : '';
+
+      if (confirmValue.length > 0 && passwordInput.value !== confirmValue) {
         if (matchError) matchError.textContent = 'Passwords do not match.';
         isValid = false;
       } else if (matchError) {
@@ -75,10 +77,22 @@ const onLoad = () => {
       });
 
       if (response.ok) {
-        form.style.display = 'none';
-        document.getElementById('signup-success')!.style.display = 'block';
-        sessionStorage.setItem('prefill-username', username);
-        setTimeout(() => { window.location.hash = '#/login'; }, 2000);
+        if ((form as any)?.style) {
+          (form as any).style.display = 'none';
+        }
+        const successEl = document.getElementById('signup-success') as HTMLElement | null;
+        if (successEl?.style) {
+          successEl.style.display = 'block';
+        }
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.setItem('prefill-username', username);
+        }
+        window.location.hash = '#/login';
+        setTimeout(() => {
+          if (window.location.hash !== '#/login') {
+            window.location.hash = '#/login';
+          }
+        }, 2000);
       } else {
         let message = 'Signup failed';
         try {

@@ -7,6 +7,17 @@ const html = `
     <div id="chat-messages">
     </div>
     <form id="chatForm" class="chat-input-bar">
+      <div class="chat-models-panel">
+        <div class="chat-models-title">Active models</div>
+        <div id="model-selector" class="chat-models-list">
+          <label><input type="checkbox" class="model-select" value="qwen2.5:0.5b" checked> qwen2.5:0.5b </label>
+          <label><input type="checkbox" class="model-select" value="qwen2.5:1.5b"> qwen2.5:1.5b </label>
+          <label><input type="checkbox" class="model-select" value="tinyllama:1.1b"> tinyllama:1.1b </label>
+          <label><input type="checkbox" class="model-select" value="qwen2.5:3b"> qwen2.5:3b</label>
+          <label><input type="checkbox" class="model-select" value="mistral:7b"> mistral:7b</label>
+          <label><input type="checkbox" class="model-select" value="llama3.1:8b"> llama3.1:8b</label>
+        </div>
+      </div>
       <div class="chat-input-wrap">
         <div class="input-prompt" style="flex: 1;"><textarea id="chat-input" class="input chat-textarea" placeholder="&lt;prompt here&gt;" autocomplete="off" rows="1"></textarea></div>
         <button class="send-btn-inner" type="submit" id="send-btn" title="Send" style="display:none;">
@@ -27,6 +38,48 @@ function escapeHtml(s: string) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+type ModelSelection = { provider?: string; model?: string };
+type ChatMessage = { role: string; content: string; modelMetadata?: ModelSelection };
+type ModelResponse = { content: string; provider?: string; model?: string; modelMetadata?: ModelSelection };
+
+const copyBtnSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
+
+const modelDisplayName = (model?: ModelSelection | null) => {
+  if (!model?.model) return 'LLM';
+  return `${model.provider || 'Ollama'} / ${model.model}`;
+};
+
+const normalizeModelSelections = (models: unknown): ModelSelection[] => {
+  if (!Array.isArray(models)) return [];
+  const normalized: ModelSelection[] = [];
+
+  for (const model of models) {
+    if (typeof model === 'string') {
+      normalized.push({ provider: 'Ollama', model });
+      continue;
+    }
+
+    if (model && typeof model === 'object' && typeof (model as { model?: unknown }).model === 'string') {
+      const raw = model as { provider?: unknown; model: string };
+      normalized.push({
+        provider: String(raw.provider || 'Ollama'),
+        model: String(raw.model),
+      });
+    }
+  }
+
+  return normalized.filter((model) => Boolean(model.model?.trim()));
+};
+
+const readCachedDefaultModels = (): ModelSelection[] => {
+  try {
+    const cached = JSON.parse(localStorage.getItem('userPreferences') || '{}');
+    return normalizeModelSelections(cached?.defaultModelSet);
+  } catch {
+    return [];
+  }
+};
+
 const onLoad = () => {
   const form = document.getElementById('chatForm') as HTMLFormElement;
   const input = document.getElementById('chat-input') as HTMLTextAreaElement;
@@ -36,6 +89,107 @@ const onLoad = () => {
   let isGenerating = false;
   let abortController: AbortController | null = null;
   let currentUserMessage = '';  // track for stop persistence
+  const modelInputs = typeof document.querySelectorAll === 'function'
+    ? Array.from(document.querySelectorAll<HTMLInputElement>('.model-select'))
+    : [];
+
+  const getSelectedModels = () => modelInputs.filter(i => i.checked).map(i => ({ provider: 'Ollama', model: i.value }));
+
+  const ensureModelSelected = () => {
+    if (!modelInputs.some(i => i.checked) && modelInputs[0]) modelInputs[0].checked = true;
+  };
+
+  const setSelectedModels = (models: ModelSelection[] = []) => {
+    const modelNames = new Set(models.map((m) => m.model).filter(Boolean));
+    if (!modelNames.size) {
+      ensureModelSelected();
+      return;
+    }
+    modelInputs.forEach((i) => {
+      i.checked = modelNames.has(i.value);
+    });
+    ensureModelSelected();
+  };
+
+  const renderComparisonGroup = (assistantMessages: ModelResponse[]) => {
+    const comparisonGroup = document.createElement('div');
+    comparisonGroup.className = 'chat-message llm multi-model-group';
+    comparisonGroup.innerHTML = assistantMessages.map((m) => `
+      <div class="multi-model-card">
+        <button class="bubble-copy-btn" title="Copy">${copyBtnSvg}</button>
+        <div class="chat-bubble llm">
+          <div class="bubble-role">${escapeHtml(modelDisplayName(m.modelMetadata || { provider: m.provider, model: m.model }))}</div>
+          <p class="llm-text">${escapeHtml(m.content || '')}</p>
+        </div>
+      </div>
+    `).join('');
+    return comparisonGroup;
+  };
+
+  const renderHistoryMessages = (historyMessages: ChatMessage[], fallbackModels: ModelSelection[] = []) => {
+    const rendered: string[] = [];
+    let i = 0;
+
+    while (i < historyMessages.length) {
+      const message = historyMessages[i];
+      if (message.role === 'user') {
+        rendered.push(
+          `<div class="chat-message user"><div class="chat-bubble user"><button class="bubble-copy-btn" title="Copy">${copyBtnSvg}</button><div class="bubble-role">You</div><p>${escapeHtml(message.content)}</p></div></div>`
+        );
+        i++;
+        continue;
+      }
+
+      const assistantGroup: ChatMessage[] = [];
+      while (i < historyMessages.length && historyMessages[i].role === 'assistant') {
+        assistantGroup.push(historyMessages[i]);
+        i++;
+      }
+
+      if (assistantGroup.length > 1) {
+        rendered.push(renderComparisonGroup(assistantGroup).outerHTML);
+        continue;
+      }
+
+      const singleMessage = assistantGroup[0];
+      const fallbackModel = fallbackModels[0];
+      const label = modelDisplayName(singleMessage.modelMetadata || fallbackModel);
+      rendered.push(
+        `<div class="chat-message llm"><button class="bubble-copy-btn" title="Copy">${copyBtnSvg}</button><div class="chat-bubble llm"><div class="bubble-role">${escapeHtml(label)}</div><p class="llm-text">${escapeHtml(singleMessage.content)}</p></div></div>`
+      );
+    }
+
+    return rendered.join('');
+  };
+
+  modelInputs.forEach((i) => i.addEventListener('change', ensureModelSelected));
+  ensureModelSelected();
+
+  const applyDefaultModels = async () => {
+    if (activeConversationId) return;
+
+    const cachedDefaults = readCachedDefaultModels();
+    if (cachedDefaults.length) {
+      setSelectedModels(cachedDefaults);
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/users/me', {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+      });
+      if (!res.ok) return;
+
+      const data = await res.json();
+      const defaults = normalizeModelSelections(data?.preferences?.defaultModelSet);
+      if (defaults.length) {
+        localStorage.setItem('userPreferences', JSON.stringify(data.preferences || {}));
+        setSelectedModels(defaults);
+      }
+    } catch {
+      // Leave the first model selected when defaults cannot be loaded.
+    }
+  };
 
   // Load current conversation id from hash or start fresh
   let activeConversationId: string | null = new URLSearchParams(location.hash.split('?')[1] || '').get('id');
@@ -48,23 +202,17 @@ const onLoad = () => {
       });
       if (res.ok) {
         const data = await res.json();
+        setSelectedModels(Array.isArray(data.selectedModels) ? data.selectedModels : []);
         if (messages && Array.isArray(data.messages)) {
-          const copyBtn = `<button class="bubble-copy-btn" title="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>`;
-          messages.innerHTML = data.messages.map((m: { role: string; content: string }) => {
-            const cls = m.role === 'user' ? 'user' : 'llm';
-            const label = m.role === 'user' ? 'You' : 'LLM';
-            const copy = copyBtn;
-            const bubbleContent = m.role === 'user'
-              ? `<div class="chat-bubble ${cls}">${copy}<div class="bubble-role">${label}</div><p>${escapeHtml(m.content)}</p></div>`
-              : `${copy}<div class="chat-bubble ${cls}"><div class="bubble-role">${label}</div><p>${escapeHtml(m.content)}</p></div>`;
-            return `<div class="chat-message ${cls}">${bubbleContent}</div>`;
-          }).join('');
+          messages.innerHTML = renderHistoryMessages(data.messages, data.selectedModels);
           messages.scrollTo(0, messages.scrollHeight);
         }
       }
       // Highlight this conversation in the sidebar
       window.dispatchEvent(new CustomEvent('sidebar:refresh', { detail: { activeId: activeConversationId } }));
     })();
+  } else {
+    void applyDefaultModels();
   }
 
   // Auto-resize textarea and show/hide send button
@@ -177,7 +325,7 @@ const onLoad = () => {
     const hint = messages?.querySelector('.start-hint');
     if (hint) hint.remove();
 
-    const copyBtnSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
+    const selectedModels = getSelectedModels();
 
     // Append user bubble
     const userMessage = document.createElement('div');
@@ -189,10 +337,73 @@ const onLoad = () => {
     sendBtn.style.display = 'none';
     messages?.scrollTo(0, messages.scrollHeight);
 
-    // Create LLM bubble with spinner
+    // Multi-model path uses non-stream fan-out and renders one bubble per model.
+    if (selectedModels.length > 1) {
+      const loading = document.createElement('div');
+      loading.className = 'chat-message llm';
+      loading.innerHTML = `<div class="chat-bubble llm"><div class="bubble-role">Models</div><p><em>Comparing responses...</em></p></div>`;
+      messages?.appendChild(loading);
+      messages?.scrollTo(0, messages.scrollHeight);
+
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          },
+          body: JSON.stringify({ message: text, conversationId: activeConversationId, selectedModels }),
+          signal: abortController!.signal
+        });
+        const data = await res.json();
+
+        if (data.conversationId && !activeConversationId) {
+          activeConversationId = data.conversationId;
+          window.dispatchEvent(new CustomEvent('sidebar:refresh', { detail: { activeId: activeConversationId } }));
+        }
+
+        loading.remove();
+
+        if (Array.isArray(data.responses)) {
+          messages?.appendChild(renderComparisonGroup(data.responses));
+        }
+
+        if (Array.isArray(data.errors) && data.errors.length) {
+          const errorGroup = document.createElement('div');
+          errorGroup.className = 'chat-message llm multi-model-group multi-model-errors';
+          errorGroup.innerHTML = data.errors.map((err: { provider: string; model: string; message: string }) => `
+            <div class="multi-model-card">
+              <div class="chat-bubble llm">
+                <div class="bubble-role">${escapeHtml(err.provider)} / ${escapeHtml(err.model)}</div>
+                <p><em>${escapeHtml(err.message || 'Model error')}</em></p>
+              </div>
+            </div>
+          `).join('');
+          messages?.appendChild(errorGroup);
+        }
+      } catch (err: any) {
+        loading.remove();
+        const errorMessage = document.createElement('div');
+        errorMessage.className = 'chat-message llm';
+        errorMessage.innerHTML = err?.name === 'AbortError'
+          ? `<div class="chat-bubble llm"><div class="bubble-role">Models</div><p><em>Response stopped.</em></p></div>`
+          : `<div class="chat-bubble llm"><div class="bubble-role">Models</div><p><em>Error getting responses.</em></p></div>`;
+        messages?.appendChild(errorMessage);
+      }
+
+      isGenerating = false;
+      abortController = null;
+      resizeInput();
+      stopBtn.style.display = 'none';
+      messages?.scrollTo(0, messages.scrollHeight);
+      return;
+    }
+
+    // Single-model path keeps stream UX.
+    const activeSingleModel = selectedModels[0];
     const llmMessage = document.createElement('div');
     llmMessage.className = 'chat-message llm';
-    llmMessage.innerHTML = `<button class="bubble-copy-btn" title="Copy">${copyBtnSvg}</button><div class="chat-bubble llm"><div class="bubble-role">LLM</div><div class="thinking-section" style="display:none;"><button class="thinking-toggle" type="button"><span class="spinner"></span> Thinking…</button><div class="thinking-content" style="display:none;"></div></div><div class="llm-spinner"><span class="spinner"></span></div><p class="llm-text"></p></div>`;
+    llmMessage.innerHTML = `<button class="bubble-copy-btn" title="Copy">${copyBtnSvg}</button><div class="chat-bubble llm"><div class="bubble-role">${escapeHtml(modelDisplayName(activeSingleModel))}</div><div class="thinking-section" style="display:none;"><button class="thinking-toggle" type="button"><span class="spinner"></span> Thinking…</button><div class="thinking-content" style="display:none;"></div></div><div class="llm-spinner"><span class="spinner"></span></div><p class="llm-text"></p></div>`;
     messages?.appendChild(llmMessage);
     const llmBubble = llmMessage.querySelector('.chat-bubble') as HTMLElement;
     messages?.scrollTo(0, messages.scrollHeight);
@@ -217,7 +428,7 @@ const onLoad = () => {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
-        body: JSON.stringify({ message: text, conversationId: activeConversationId }),
+        body: JSON.stringify({ message: text, conversationId: activeConversationId, selectedModels }),
         signal: abortController!.signal
       });
 
@@ -225,6 +436,9 @@ const onLoad = () => {
         textEl.innerHTML = '<em>Error getting response.</em>';
         spinnerEl.style.display = 'none';
         isGenerating = false;
+        abortController = null;
+        resizeInput();
+        stopBtn.style.display = 'none';
         return;
       }
 
@@ -359,7 +573,7 @@ const onLoad = () => {
 
     isGenerating = false;
     abortController = null;
-    sendBtn.style.display = '';
+    resizeInput();
     stopBtn.style.display = 'none';
     messages?.scrollTo(0, messages.scrollHeight);
   });
@@ -376,7 +590,7 @@ const onLoad = () => {
     const btn = (e.target as HTMLElement).closest('.bubble-copy-btn') as HTMLElement | null;
     if (!btn) return;
     const message = btn.closest('.chat-message');
-    const bubble = message?.querySelector('.chat-bubble');
+    const bubble = btn.closest('.chat-bubble') || message?.querySelector('.chat-bubble');
     const text = (bubble?.querySelector('.llm-text') || bubble?.querySelector('p'))?.textContent?.trim() ?? '';
     if (!text) return;
 

@@ -39,17 +39,19 @@ Once you `cd` into the repository, you would need to make the following changes:
 - Copy `.env.example` into `.env`, making changes as needed 
 - Start `ollama` and database using 
 ```docker compose -f backend/docker-compose.yaml up -d```
+- If `ollama` was already running before this change, recreate it so the new network mode takes effect:
+```docker compose -f backend/docker-compose.yaml up -d --force-recreate ollama```
 - Pull the Ollama model (first time only — this downloads ~2.6 GB):
-```docker exec ollama ollama pull qwen3:8b```
+```docker exec ollama ollama pull qwen2.5:1.5b```
   You can verify it's ready with: `docker exec ollama ollama list`
 - run `npm i` to install/update all the node modules
 - run `npm run dev` to run the development (testing) environment 
 
-> **Ollama configuration:** The chat feature calls the Ollama container at `http://127.0.0.1:11434` using the `qwen3:8b` model by default. You can change these in your `.env` file with `OLLAMA_URL` and `OLLAMA_MODEL`.
+> **Ollama configuration:** The chat feature calls Ollama at `http://127.0.0.1:11434`. The compose file now runs the Ollama container on the host network so it uses the host DNS stack instead of Docker's embedded resolver. You can change the model in your `.env` file with `OLLAMA_MODEL`.
 
 Alternatively, you can run this handy dandy one-liner that does it all for you: 
 ```
- git clone https://github.com/Purple-Chicken/javascript-makes-me-vomit.git && cd javascript-makes-me-vomit && cp .env.example .env && docker compose -f backend/docker-compose.yaml up -d && docker exec ollama ollama pull qwen3:8b && npm i && npm run dev
+ git clone https://github.com/Purple-Chicken/javascript-makes-me-vomit.git && cd javascript-makes-me-vomit && cp .env.example .env && docker compose -f backend/docker-compose.yaml up -d && docker exec ollama ollama pull qwen2.5:1.5b && npm i && npm run dev
 ```
 
 
@@ -84,5 +86,3 @@ git push --set-upstream origin [new-branch-name]
 And, assuming you are are not on main, you can push onto your branch. 
 
 In GitHub, you can make a pull request if you want to merge to main. 
-
-
