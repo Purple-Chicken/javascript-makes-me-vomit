@@ -267,6 +267,7 @@ const onLoad = () => {
         const res = await fetch('/api/users/me', { method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ username: newName }) });
         if (res.ok) {
             if (usernameError) usernameError.textContent = '';
+            localStorage.setItem('cachedUsername', newName);
         } else {
             const data = await res.json();
             if (usernameError) usernameError.textContent = data.error || 'Update failed';
@@ -314,6 +315,8 @@ const onLoad = () => {
         localStorage.removeItem('token');
         localStorage.removeItem('userPreferences');
         localStorage.removeItem('userProfilePic');
+        localStorage.removeItem('defaultModel');
+        localStorage.removeItem('defaultModelCategory');
         resetTheme();
         window.location.hash = '#/login';
     });
@@ -333,6 +336,8 @@ const onLoad = () => {
             localStorage.removeItem('token');
             localStorage.removeItem('userPreferences');
             localStorage.removeItem('userProfilePic');
+            localStorage.removeItem('defaultModel');
+            localStorage.removeItem('defaultModelCategory');
             if (deleteDialog) deleteDialog.style.display = 'none';
             resetTheme();
             alert('Account deleted successfully.');
@@ -351,7 +356,6 @@ function applyTheme(prefs: { matrixRain?: boolean; lightMode?: boolean; font?: s
 
 function resetTheme() {
     localStorage.removeItem('userPreferences');
-    updateFontSelection('ibm-plex');
     (window as any).__applyTheme?.({ matrixRain: true, lightMode: false, font: 'ibm-plex', themeColor: 'green' });
 }
 

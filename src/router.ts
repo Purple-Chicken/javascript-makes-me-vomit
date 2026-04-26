@@ -141,6 +141,12 @@ export async function handleRoute() {
           if (user.preferences) {
             localStorage.setItem('userPreferences', JSON.stringify(user.preferences));
             (window as any).__applyTheme?.(user.preferences);
+            if (user.preferences.defaultModel) {
+              localStorage.setItem('defaultModel', user.preferences.defaultModel);
+            }
+            if (user.preferences.modelCategory) {
+              localStorage.setItem('defaultModelCategory', user.preferences.modelCategory);
+            }
           }
           // Set profile icon
           if (typeof user.profilePic === 'number') {
@@ -277,6 +283,8 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     const btn = document.getElementById('topbar-profile');
     const dropdown = document.getElementById('profile-dropdown') as HTMLElement | null;
     const usernameEl = document.getElementById('profile-dropdown-username');
+    const tokensBtn = document.getElementById('profile-dropdown-tokens-btn');
+    const tokensEl = document.getElementById('profile-dropdown-tokens');
     const logoutBtn = document.getElementById('profile-dropdown-logout');
     const settingsLink = document.getElementById('profile-dropdown-settings');
 
@@ -286,17 +294,51 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       const u = localStorage.getItem('cachedUsername');
       if (usernameEl) usernameEl.textContent = u || '—';
     };
+
+    const refreshTokenBalance = async () => {
+      if (!tokensEl) return;
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      try {
+        const res = await fetch('/api/tokens/me', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) {
+          tokensEl.textContent = 'Tokens remaining: --';
+          return;
+        }
+        const data = await res.json();
+        tokensEl.textContent = `Tokens remaining: ${data.tokensRemaining}`;
+      } catch {
+        tokensEl.textContent = 'Tokens remaining: --';
+      }
+    };
     updateUsername();
 
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       updateUsername();
+      refreshTokenBalance();
       dropdown.style.display = dropdown.style.display === 'none' ? '' : 'none';
+    });
+
+    tokensBtn?.addEventListener('mouseenter', () => {
+      if (tokensEl) tokensEl.style.display = '';
+      refreshTokenBalance();
+    });
+    tokensBtn?.addEventListener('mouseleave', () => {
+      if (tokensEl) tokensEl.style.display = 'none';
+    });
+    tokensBtn?.addEventListener('click', () => {
+      if (!tokensEl) return;
+      tokensEl.style.display = tokensEl.style.display === 'none' ? '' : 'none';
+      refreshTokenBalance();
     });
 
     document.addEventListener('click', (e) => {
       if (!(e.target as HTMLElement).closest('#profile-dropdown-wrap')) {
         dropdown.style.display = 'none';
+        if (tokensEl) tokensEl.style.display = 'none';
       }
     });
 
@@ -306,6 +348,8 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       localStorage.removeItem('userPreferences');
       localStorage.removeItem('userProfilePic');
       localStorage.removeItem('cachedUsername');
+      localStorage.removeItem('defaultModel');
+      localStorage.removeItem('defaultModelCategory');
       window.location.hash = '#/login';
       handleRoute();
     });
