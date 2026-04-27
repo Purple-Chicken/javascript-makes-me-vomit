@@ -52,6 +52,10 @@ const onLoad = () => {
   const refreshBtn = document.getElementById('settings-refresh-models') as HTMLButtonElement;
   const status = document.getElementById('settings-status') as HTMLElement;
 
+  if (!categorySelect || !modelSelect || !warning || !saveBtn || !refreshBtn || !status) {
+    return;
+  }
+
   let models: ModelDto[] = [];
   let selectedCategory: 'local' | 'cloud' = 'local';
   let selectedModelId = 'qwen3:0.5b';

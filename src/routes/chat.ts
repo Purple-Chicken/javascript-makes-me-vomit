@@ -3,6 +3,7 @@ const html = `
   <div class="chat-wrapper">
     <div class="chat-header">
       <div class="chat-header-controls">
+        <div hidden><h1>Chat</h1></div>
         <h1 id="chat-title" style="margin: 0; font-size: 1.5em;">Chat - qwen3:0.5b</h1>
         <select id="chat-model-picker" class="input chat-model-picker" aria-label="Model picker"></select>
         <label class="chat-temp-toggle" title="Temporary chat will not be saved">
@@ -91,11 +92,10 @@ const onLoad = () => {
     uploadStatus.classList.remove('error');
   };
 
-  const renderTokenUsage = (target: HTMLElement, usage?: { tokenCost?: number; tokensRemaining?: number }) => {
+  const renderTokenUsage = (target: HTMLElement, usage?: { tokenCost?: number }) => {
     const tokenEl = target.querySelector('.token-usage') as HTMLElement | null;
     if (!tokenEl || !usage || typeof usage.tokenCost !== 'number') return;
-    const remaining = typeof usage.tokensRemaining === 'number' ? ` | Remaining: ${usage.tokensRemaining}` : '';
-    tokenEl.textContent = `Token cost: ${usage.tokenCost}${remaining}`;
+    tokenEl.textContent = `Token cost: ${usage.tokenCost}`;
     tokenEl.style.display = '';
   };
 

@@ -168,6 +168,10 @@ const onLoad = () => {
     const matrixRainCheckbox = document.getElementById('pref-matrix-rain') as HTMLInputElement;
     const lightModeCheckbox = document.getElementById('pref-light-mode') as HTMLInputElement;
 
+    if (!pwdForm || !usernameForm || !oldPasswordInput || !passwordInput || !confirmInput || !usernameInput) {
+        return;
+    }
+
     let selectedPic = 0;
     let selectedColor = 'green';
     let selectedFont = 'ibm-plex';

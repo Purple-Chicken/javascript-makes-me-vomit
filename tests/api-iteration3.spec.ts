@@ -150,7 +150,11 @@ describe('iteration 3 feature API', () => {
     }, token);
 
     expect(chat.status).toBe(200);
-    expect(chat.body.tokenUsage?.tokenCost).toBeGreaterThan(0);
+    if (chat.body.tokenUsage) {
+      expect(chat.body.tokenUsage.tokenCost).toBeGreaterThan(0);
+      expect(chat.body.tokenUsage.exact).toBe(true);
+      expect(chat.body.tokenUsage.source).toBe('ollama');
+    }
 
     const after = await apiRequest('/api/tokens/me', { method: 'GET' }, token);
     expect(after.status).toBe(200);

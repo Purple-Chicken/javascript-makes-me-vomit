@@ -23,6 +23,7 @@ const MONGODB_URI =
   'mongodb://admin:admin@127.0.0.1:27017/mydb?authSource=admin';
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://127.0.0.1:11434';
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'qwen3:8b';
+const OLLAMA_REQUEST_TIMEOUT_MS = Number(process.env.OLLAMA_REQUEST_TIMEOUT_MS || '60000');
 
 type Provider = 'ollama' | 'openai' | 'google' | 'anthropic';
 
@@ -110,18 +111,33 @@ const synthesizeReply = (prompt: string, modelId: string): string => {
     return 'I cannot access live weather data here, but Seattle is typically cool and often cloudy with possible light rain.';
   }
 
-  return `[${modelId}] ${prompt.slice(0, 180)}${prompt.length > 180 ? '...' : ''}`;
+  const normalizedPrompt = primaryPrompt.replace(/\s+/g, ' ').trim();
+  if (!normalizedPrompt) {
+    return `[${modelId}] I’m ready for your next message.`;
+  }
+
+  return `[${modelId}] I could not reach the model backend, so here is a fallback response. You asked: "${normalizedPrompt.slice(0, 180)}${normalizedPrompt.length > 180 ? '...' : ''}"`;
 };
 
 const DEFAULT_TOKEN_QUOTA = Number(process.env.TOKEN_QUOTA || '100000');
 
-const estimateTokens = (text: string) => {
-  const normalized = text.trim();
-  if (!normalized) return 0;
-  return Math.max(1, Math.ceil(normalized.length / 4));
+type ModelTokenUsage = {
+  inputTokens: number;
+  outputTokens: number;
+  tokenCost: number;
+  exact: true;
+  source: 'ollama';
 };
 
-const calcTokenCost = (prompt: string, reply: string) => estimateTokens(prompt) + estimateTokens(reply);
+type GenerateResult = {
+  reply: string;
+  tokenUsage?: ModelTokenUsage;
+};
+
+const normalizeTokenCount = (value: unknown) => {
+  const num = Number(value);
+  return Number.isFinite(num) && num >= 0 ? Math.floor(num) : 0;
+};
 
 const sanitizeText = (value: string, maxLen = 1600) =>
   value.replace(/[^\x09\x0A\x0D\x20-\x7E]/g, '').slice(0, maxLen).trim();
@@ -206,6 +222,18 @@ const applyUsageUpdate = async (userId: string, tokenCost: number) => {
 
   const remaining = Math.max(0, quota - used);
   return { tokenCost, tokenQuota: quota, tokensUsed: used, tokensRemaining: remaining };
+};
+
+const applyExactTokenUsage = async (userId: string, usage?: ModelTokenUsage) => {
+  if (!usage) return undefined;
+  const accountUsage = await applyUsageUpdate(userId, usage.tokenCost);
+  return {
+    ...accountUsage,
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    exact: true as const,
+    source: usage.source,
+  };
 };
 
 // Middleware
@@ -418,27 +446,71 @@ app.delete('/api/users/me', authenticateJWT, async (req, res) => {
 
 // ── Chat / Conversation endpoints ──
 
-async function queryOllama(messages: { role: string; content: string }[], modelId: string): Promise<string> {
-  const res = await fetch(`${OLLAMA_URL}/api/chat`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: modelId,
-      messages,
-      stream: false,
-    }),
+async function queryOllama(messages: { role: string; content: string }[], modelId: string): Promise<GenerateResult> {
+  const controller = new AbortController();
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  const request = (async () => {
+    try {
+      const res = await fetch(`${OLLAMA_URL}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          model: modelId,
+          messages,
+          stream: false,
+        }),
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Ollama error ${res.status}: ${text}`);
+      }
+
+      const data = await res.json() as {
+        message?: { content?: string };
+        prompt_eval_count?: number;
+        eval_count?: number;
+      };
+
+      const reply = data.message?.content?.trim() || '';
+      const inputTokens = normalizeTokenCount(data.prompt_eval_count);
+      const outputTokens = normalizeTokenCount(data.eval_count);
+      const hasExactUsage = inputTokens > 0 || outputTokens > 0;
+
+      return {
+        reply,
+        tokenUsage: hasExactUsage
+          ? {
+              inputTokens,
+              outputTokens,
+              tokenCost: inputTokens + outputTokens,
+              exact: true,
+              source: 'ollama',
+            }
+          : undefined,
+      };
+    } finally {
+      controller.abort();
+    }
+  })();
+
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      controller.abort();
+      reject(new Error(`Ollama request timed out after ${OLLAMA_REQUEST_TIMEOUT_MS}ms`));
+    }, OLLAMA_REQUEST_TIMEOUT_MS);
   });
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Ollama error ${res.status}: ${text}`);
+  try {
+    return await Promise.race([request, timeout]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
   }
-
-  const data = await res.json() as { message?: { content?: string } };
-  return data.message?.content?.trim() || '';
 }
 
-async function generateReply(messages: { role: string; content: string }[], modelId: string): Promise<string> {
+async function generateReply(messages: { role: string; content: string }[], modelId: string): Promise<GenerateResult> {
   const model = getModelById(modelId);
   if (!model) {
     throw new HttpError(400, `Unknown model: ${modelId}`);
@@ -452,14 +524,29 @@ async function generateReply(messages: { role: string; content: string }[], mode
 
   if (model.category === 'local') {
     try {
-      return stripThinkTags(await queryOllama(messages, model.id));
+      const result = await queryOllama(messages, model.id);
+      return {
+        reply: stripThinkTags(result.reply),
+        tokenUsage: result.tokenUsage,
+      };
     } catch {
-      return synthesizeReply(latestUserMessage, model.id);
+      if (model.id !== OLLAMA_MODEL) {
+        try {
+          const fallbackResult = await queryOllama(messages, OLLAMA_MODEL);
+          return {
+            reply: stripThinkTags(fallbackResult.reply),
+            tokenUsage: fallbackResult.tokenUsage,
+          };
+        } catch {
+          // Fall through to deterministic synthetic fallback.
+        }
+      }
+      return { reply: synthesizeReply(latestUserMessage, model.id) };
     }
   }
 
   // Cloud models are represented here with a deterministic fallback to keep tests stable.
-  return synthesizeReply(latestUserMessage, model.id);
+  return { reply: synthesizeReply(latestUserMessage, model.id) };
 }
 
 // POST /api/chat  — send a message, get a random reply, persist both
@@ -483,8 +570,9 @@ app.post('/api/chat', authenticateJWT, async (req, res) => {
       : message;
 
     if (isTemporary) {
-      const reply = await generateReply([{ role: 'user', content: effectiveMessage }], selectedModelId);
-      const tokenUsage = await applyUsageUpdate(String(userId), calcTokenCost(effectiveMessage, reply));
+      const generated = await generateReply([{ role: 'user', content: effectiveMessage }], selectedModelId);
+      const reply = generated.reply;
+      const tokenUsage = await applyExactTokenUsage(String(userId), generated.tokenUsage);
       return res.json({ reply, conversationId: null, modelId: selectedModelId, isTemporary: true, tokenUsage });
     }
 
@@ -506,14 +594,15 @@ app.post('/api/chat', authenticateJWT, async (req, res) => {
       { role: 'user', content: effectiveMessage },
     ];
 
-    const reply = await generateReply(ollamaMessages, selectedModelId);
+    const generated = await generateReply(ollamaMessages, selectedModelId);
+    const reply = generated.reply;
 
     conversation.messages.push({ role: 'user', content: effectiveMessage });
     conversation.messages.push({ role: 'assistant', content: reply });
     conversation.modelId = selectedModelId;
     await conversation.save();
 
-    const tokenUsage = await applyUsageUpdate(String(userId), calcTokenCost(effectiveMessage, reply));
+    const tokenUsage = await applyExactTokenUsage(String(userId), generated.tokenUsage);
 
     res.json({ reply, conversationId: conversation._id, modelId: selectedModelId, tokenUsage });
   } catch (err: any) {
@@ -581,8 +670,11 @@ app.post('/api/chat/stream', authenticateJWT, async (req, res) => {
     res.write(JSON.stringify({ init: true, conversationId: conversation?._id ? String(conversation._id) : null, modelId: selectedModelId }) + '\n');
 
     let reply = '';
+    let usageFromProvider: ModelTokenUsage | undefined;
     try {
-      reply = await generateReply(promptMessages, selectedModelId);
+      const generated = await generateReply(promptMessages, selectedModelId);
+      reply = generated.reply;
+      usageFromProvider = generated.tokenUsage;
     } catch (err) {
       if (err instanceof HttpError) {
         res.write(JSON.stringify({ error: err.message }) + '\n');
@@ -609,13 +701,13 @@ app.post('/api/chat/stream', authenticateJWT, async (req, res) => {
       conversation.modelId = selectedModelId;
       await conversation.save();
 
-      const tokenUsage = await applyUsageUpdate(String(userId), calcTokenCost(effectiveMessage, cleanReply));
+      const tokenUsage = await applyExactTokenUsage(String(userId), usageFromProvider);
 
       res.write(JSON.stringify({ done: true, conversationId: conversation._id, tokenUsage }) + '\n');
       res.end();
     } else if (!clientDisconnected) {
       const cleanReply = stripThinkTags(fullContent);
-      const tokenUsage = await applyUsageUpdate(String(userId), calcTokenCost(effectiveMessage, cleanReply));
+      const tokenUsage = await applyExactTokenUsage(String(userId), usageFromProvider);
       res.write(JSON.stringify({ done: true, conversationId: null, tokenUsage }) + '\n');
       res.end();
     }
@@ -796,8 +888,9 @@ app.post('/api/chats/:id/messages', authenticateJWT, async (req, res) => {
     if (chatId.startsWith('temp_')) {
       const modelId = req.body?.modelId || DEFAULT_MODEL_ID;
       try {
-        const reply = await generateReply([{ role: 'user', content }], modelId);
-        const tokenUsage = await applyUsageUpdate(String(userId), calcTokenCost(content, reply));
+        const generated = await generateReply([{ role: 'user', content }], modelId);
+        const reply = generated.reply;
+        const tokenUsage = await applyExactTokenUsage(String(userId), generated.tokenUsage);
         return res.status(201).json({ id: `tempmsg_${Date.now()}`, role: 'assistant', content: reply, parentId: req.body?.parentId || null, tokenUsage });
       } catch (err: any) {
         const status = err instanceof HttpError ? err.status : 500;
@@ -812,11 +905,12 @@ app.post('/api/chats/:id/messages', authenticateJWT, async (req, res) => {
 
     conversation.messages.push({ role: 'user', content });
     const modelId = conversation.modelId || DEFAULT_MODEL_ID;
-    const reply = await generateReply(conversation.messages as { role: string; content: string }[], modelId);
+    const generated = await generateReply(conversation.messages as { role: string; content: string }[], modelId);
+    const reply = generated.reply;
     conversation.messages.push({ role: 'assistant', content: reply });
     await conversation.save();
 
-    const tokenUsage = await applyUsageUpdate(String(userId), calcTokenCost(content, reply));
+    const tokenUsage = await applyExactTokenUsage(String(userId), generated.tokenUsage);
 
     res.status(201).json({ id: `msg_${conversation.messages.length}`, parentId: req.body?.parentId || null, reply, modelId, tokenUsage });
   } catch (err: any) {

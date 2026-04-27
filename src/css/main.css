@@ -373,7 +373,7 @@ pre {
   height: 100vh;
   width: 100%;
   margin-top: -60px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .chat-header {
@@ -389,9 +389,12 @@ pre {
   pointer-events: none;
   transition: left 0.25s ease;
   background: transparent;
+  overflow: visible;
 }
 
 .chat-header-controls {
+  position: relative;
+  z-index: 4;
   pointer-events: auto;
   display: flex;
   align-items: center;
@@ -404,6 +407,10 @@ pre {
 .chat-model-picker {
   min-width: 190px;
   padding: 6px 10px;
+  position: relative;
+  z-index: 5;
+  appearance: auto;
+  -webkit-appearance: menulist;
 }
 
 .chat-temp-toggle {
@@ -966,10 +973,12 @@ body.nav-collapsed .sidebar-section-label {
   padding: 0 20px;
   z-index: 3;
   background: transparent;
+  pointer-events: none;
 }
 
 #profile-dropdown-wrap {
   position: relative;
+  pointer-events: auto;
 }
 
 .profile-dropdown {
@@ -1021,6 +1030,7 @@ body.nav-collapsed .sidebar-section-label {
 #topbar-auth {
   display: flex;
   gap: 8px;
+  pointer-events: auto;
 }
 
 .topbar-btn {

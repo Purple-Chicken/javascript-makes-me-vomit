@@ -33,6 +33,11 @@ const onLoad = () => {
     const confirmInput = document.getElementById('password-confirm') as HTMLInputElement;
     const passwordError = document.getElementById('password-error');
     const matchError = document.getElementById('match-error');
+    const usernameInput = document.getElementById('username') as HTMLInputElement | null;
+    const successPanel = document.getElementById('signup-success') as HTMLElement | null;
+    const storage = typeof sessionStorage !== 'undefined' ? sessionStorage : null;
+
+    if (!form || !passwordInput || !confirmInput || !usernameInput) return;
 
     const validate = () => {
       let isValid = true;
@@ -65,7 +70,7 @@ const onLoad = () => {
 
       if (!validate()) return;
 
-      const username = (document.getElementById('username') as HTMLInputElement).value;
+      const username = usernameInput.value;
       const password = typeof passwordInput?.value === 'string' ? passwordInput.value : '';
 
       const response = await fetch('/api/users', {
@@ -75,10 +80,15 @@ const onLoad = () => {
       });
 
       if (response.ok) {
-        form.style.display = 'none';
-        document.getElementById('signup-success')!.style.display = 'block';
-        sessionStorage.setItem('prefill-username', username);
-        setTimeout(() => { window.location.hash = '#/login'; }, 2000);
+        if ((form as HTMLElement).style) {
+          form.style.display = 'none';
+        }
+        if (successPanel?.style) {
+          successPanel.style.display = 'block';
+        }
+        storage?.setItem('prefill-username', username);
+        alert('Account created! Please log in.');
+        window.location.hash = '#/login';
       } else {
         let message = 'Signup failed';
         try {
