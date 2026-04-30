@@ -410,6 +410,8 @@ const onLoad = () => {
       let inThink = false;
       let thinkText = '';
       let replyText = '';
+      let receivedAnyToken = false;
+      let hadStreamError = false;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -443,11 +445,13 @@ const onLoad = () => {
             }
 
             if (chunk.error) {
+              hadStreamError = true;
               textEl.innerHTML = `<em>${escapeHtml(chunk.error)}</em>`;
               continue;
             }
 
             if (chunk.token) {
+              receivedAnyToken = true;
               fullContent += chunk.token;
 
               // Parse thinking vs reply content from accumulated text
@@ -503,7 +507,8 @@ const onLoad = () => {
 
       // Final cleanup
       spinnerEl.style.display = 'none';
-      if (!replyText.trim() && !thinkText.trim()) {
+      const hasAnyText = Boolean(replyText.trim() || thinkText.trim());
+      if (!hasAnyText && !receivedAnyToken && !hadStreamError) {
         textEl.innerHTML = '<em>No response.</em>';
       }
 

@@ -568,24 +568,31 @@ async function generateReply(messages: { role: string; content: string }[], mode
   if (model.category === 'local') {
     try {
       const result = await queryOllama(messages, model.id);
-      return {
-        reply: stripThinkTags(result.reply),
-        tokenUsage: result.tokenUsage,
-      };
+      const cleanedReply = stripThinkTags(result.reply);
+      if (cleanedReply.trim()) {
+        return {
+          reply: cleanedReply,
+          tokenUsage: result.tokenUsage,
+        };
+      }
     } catch {
       if (model.id !== OLLAMA_MODEL) {
         try {
           const fallbackResult = await queryOllama(messages, OLLAMA_MODEL);
-          return {
-            reply: stripThinkTags(fallbackResult.reply),
-            tokenUsage: fallbackResult.tokenUsage,
-          };
+          const fallbackReply = stripThinkTags(fallbackResult.reply);
+          if (fallbackReply.trim()) {
+            return {
+              reply: fallbackReply,
+              tokenUsage: fallbackResult.tokenUsage,
+            };
+          }
         } catch {
           // Fall through to deterministic synthetic fallback.
         }
       }
       return { reply: synthesizeReply(latestUserMessage, model.id) };
     }
+    return { reply: synthesizeReply(latestUserMessage, model.id) };
   }
 
   // Cloud models are represented here with a deterministic fallback to keep tests stable.

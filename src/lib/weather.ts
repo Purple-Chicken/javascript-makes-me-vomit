@@ -124,6 +124,56 @@ const LOCATION_PATTERNS = [
   /^(.+?)\s+\b(?:weather|forecast)\b/i,
 ];
 
+const normalizeTargetDay = (prompt: string): WeatherIntent['targetDay'] =>
+  /\btomorrow\b/i.test(prompt) ? 'tomorrow' : 'today';
+
+const formatLocationLabel = (location: GeocodingResult) => {
+  const parts = [location.name, location.admin1, location.country].filter(Boolean);
+  return parts.join(', ');
+};
+
+const describeWeatherCode = (code?: number) => {
+  if (code === undefined || code === null) return 'conditions unavailable';
+  const mapping: Record<number, string> = {
+    0: 'clear sky',
+    1: 'mainly clear',
+    2: 'partly cloudy',
+    3: 'overcast',
+    45: 'fog',
+    48: 'depositing rime fog',
+    51: 'light drizzle',
+    53: 'moderate drizzle',
+    55: 'dense drizzle',
+    56: 'light freezing drizzle',
+    57: 'dense freezing drizzle',
+    61: 'slight rain',
+    63: 'moderate rain',
+    65: 'heavy rain',
+    66: 'light freezing rain',
+    67: 'heavy freezing rain',
+    71: 'slight snow fall',
+    73: 'moderate snow fall',
+    75: 'heavy snow fall',
+    77: 'snow grains',
+    80: 'slight rain showers',
+    81: 'moderate rain showers',
+    82: 'violent rain showers',
+    85: 'slight snow showers',
+    86: 'heavy snow showers',
+    95: 'thunderstorm',
+    96: 'thunderstorm with slight hail',
+    99: 'thunderstorm with heavy hail',
+  };
+  return mapping[code] || 'mixed conditions';
+};
+
+const extractClarificationQuery = (assistantReply: string) => {
+  if (!assistantReply) return null;
+  const match = assistantReply.match(/Which location did you mean for "([^"]+)"\?/i)
+    || assistantReply.match(/Which country or state is "([^"]+)" in\?/i);
+  return match?.[1]?.trim() || null;
+};
+
 const cleanLocation = (raw: string) => {
   const normalized = raw
     .replace(/\b(please|tell me|show me|give me|what is|what's|how is|how's|can you|could you)\b/gi, ' ')
