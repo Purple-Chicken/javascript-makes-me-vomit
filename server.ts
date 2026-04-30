@@ -8,6 +8,7 @@ import { configurePassport } from './src/config/passport';
 import { User } from './src/models/User';
 import { Conversation } from './src/models/Conversation';
 import bcrypt from 'bcryptjs';
+import { lookupWeatherReplyFromMessages } from './src/lib/weather';
 
 dotenv.config();
 
@@ -21,9 +22,28 @@ const PORT = Number(process.env.PORT || '5000');
 const MONGODB_URI =
   process.env.MONGODB_URI ||
   'mongodb://admin:admin@127.0.0.1:27017/mydb?authSource=admin';
-const OLLAMA_URL = process.env.OLLAMA_URL || 'http://127.0.0.1:11434';
+const DEFAULT_OLLAMA_URL = 'http://127.0.0.1:11434';
+const OLLAMA_URL = process.env.OLLAMA_URL || DEFAULT_OLLAMA_URL;
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'qwen3:8b';
 const OLLAMA_REQUEST_TIMEOUT_MS = Number(process.env.OLLAMA_REQUEST_TIMEOUT_MS || '60000');
+
+const getOllamaUrlCandidates = (baseUrl: string) => {
+  const urls = [baseUrl];
+  try {
+    const parsed = new URL(baseUrl);
+    const isLocalhost = parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost';
+    if (isLocalhost) {
+      const port = parsed.port || '11434';
+      const dockerUrl = `${parsed.protocol}//ollama:${port}`;
+      if (!urls.includes(dockerUrl)) {
+        urls.push(dockerUrl);
+      }
+    }
+  } catch {
+    // Keep the user-provided URL only if it is not a valid URL string.
+  }
+  return urls;
+};
 
 type Provider = 'ollama' | 'openai' | 'google' | 'anthropic';
 
@@ -45,11 +65,12 @@ class HttpError extends Error {
 }
 
 const MODEL_CATALOG: ModelCatalogItem[] = [
-  { id: 'qwen3:0.5b', label: 'qwen3:0.5b', provider: 'ollama', category: 'local' },
-  { id: 'qwen3:1.7b', label: 'qwen3:1.7b', provider: 'ollama', category: 'local' },
-  { id: 'gemma3:1b', label: 'gemma3:1b', provider: 'ollama', category: 'local' },
-  { id: 'llama3.2:1b', label: 'llama3.2:1b', provider: 'ollama', category: 'local' },
-  { id: 'phi4-mini', label: 'phi4-mini', provider: 'ollama', category: 'local' },
+  { id: 'qwen3:0.6b', label: 'qwen3:0.6b', provider: 'ollama', category: 'local' },
+  { id: 'qwen3:8b', label: 'qwen3:8b', provider: 'ollama', category: 'local' },
+  { id: 'qwen2.5:0.5b', label: 'qwen2.5:0.5b', provider: 'ollama', category: 'local' },
+  { id: 'qwen2.5:1.5b', label: 'qwen2.5:1.5b', provider: 'ollama', category: 'local' },
+  { id: 'qwen2.5:3b', label: 'qwen2.5:3b', provider: 'ollama', category: 'local' },
+  { id: 'tinyllama:1.1b', label: 'tinyllama:1.1b', provider: 'ollama', category: 'local' },
   { id: 'gpt-4o', label: 'gpt-4o', provider: 'openai', category: 'cloud', envVar: 'OPENAI_API_KEY' },
   { id: 'gpt-4o-mini', label: 'gpt-4o-mini', provider: 'openai', category: 'cloud', envVar: 'OPENAI_API_KEY' },
   { id: 'gpt-4', label: 'gpt-4', provider: 'openai', category: 'cloud' },
@@ -59,7 +80,7 @@ const MODEL_CATALOG: ModelCatalogItem[] = [
   { id: 'claude-3-5-sonnet', label: 'claude-3-5-sonnet', provider: 'anthropic', category: 'cloud', envVar: 'ANTHROPIC_API_KEY' },
 ];
 
-const DEFAULT_MODEL_ID = MODEL_CATALOG.find((m) => m.id === 'qwen3:0.5b')?.id || OLLAMA_MODEL;
+const DEFAULT_MODEL_ID = MODEL_CATALOG.find((m) => m.id === 'qwen3:0.6b')?.id || OLLAMA_MODEL;
 
 const getModelById = (id?: string): ModelCatalogItem | undefined =>
   MODEL_CATALOG.find((m) => m.id === id);
@@ -446,13 +467,13 @@ app.delete('/api/users/me', authenticateJWT, async (req, res) => {
 
 // ── Chat / Conversation endpoints ──
 
-async function queryOllama(messages: { role: string; content: string }[], modelId: string): Promise<GenerateResult> {
+async function queryOllamaAt(baseUrl: string, messages: { role: string; content: string }[], modelId: string): Promise<GenerateResult> {
   const controller = new AbortController();
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
   const request = (async () => {
     try {
-      const res = await fetch(`${OLLAMA_URL}/api/chat`, {
+      const res = await fetch(`${baseUrl}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
@@ -510,6 +531,24 @@ async function queryOllama(messages: { role: string; content: string }[], modelI
   }
 }
 
+async function queryOllama(messages: { role: string; content: string }[], modelId: string): Promise<GenerateResult> {
+  const candidates = getOllamaUrlCandidates(OLLAMA_URL);
+  let lastError: unknown;
+
+  for (const baseUrl of candidates) {
+    try {
+      return await queryOllamaAt(baseUrl, messages, modelId);
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  if (lastError instanceof Error) {
+    throw lastError;
+  }
+  throw new Error('Ollama request failed');
+}
+
 async function generateReply(messages: { role: string; content: string }[], modelId: string): Promise<GenerateResult> {
   const model = getModelById(modelId);
   if (!model) {
@@ -521,6 +560,10 @@ async function generateReply(messages: { role: string; content: string }[], mode
   }
 
   const latestUserMessage = [...messages].reverse().find((m) => m.role === 'user')?.content || '';
+  const weatherReply = await lookupWeatherReplyFromMessages(messages);
+  if (weatherReply) {
+    return { reply: weatherReply };
+  }
 
   if (model.category === 'local') {
     try {

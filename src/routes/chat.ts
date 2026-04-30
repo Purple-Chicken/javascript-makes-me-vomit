@@ -4,7 +4,7 @@ const html = `
     <div class="chat-header">
       <div class="chat-header-controls">
         <div hidden><h1>Chat</h1></div>
-        <h1 id="chat-title" style="margin: 0; font-size: 1.5em;">Chat - qwen3:0.5b</h1>
+        <h1 id="chat-title" style="margin: 0; font-size: 1.5em;">Chat - qwen3:0.6b</h1>
         <select id="chat-model-picker" class="input chat-model-picker" aria-label="Model picker"></select>
         <label class="chat-temp-toggle" title="Temporary chat will not be saved">
           <input type="checkbox" id="chat-temp-toggle-input" />
@@ -66,7 +66,7 @@ const onLoad = () => {
   let isGenerating = false;
   let abortController: AbortController | null = null;
   let currentUserMessage = '';  // track for stop persistence
-  let selectedModelId = localStorage.getItem('defaultModel') || 'qwen3:0.5b';
+  let selectedModelId = localStorage.getItem('defaultModel') || 'qwen3:0.6b';
   let pendingAttachment: { name: string; context: string } | null = null;
 
   // Load current conversation id from hash or start fresh
@@ -385,7 +385,19 @@ const onLoad = () => {
       clearUploadStatus();
 
       if (!res.ok || !res.body) {
-        textEl.innerHTML = '<em>Error getting response.</em>';
+        let detail = '';
+        try {
+          detail = await res.text();
+        } catch {}
+        let message = detail.trim();
+        if (message.startsWith('{')) {
+          try {
+            const parsed = JSON.parse(message) as { error?: string };
+            message = parsed.error || message;
+          } catch {}
+        }
+        const statusInfo = `Request failed (${res.status})`;
+        textEl.innerHTML = `<em>${escapeHtml(message || statusInfo)}</em>`;
         spinnerEl.style.display = 'none';
         isGenerating = false;
         return;

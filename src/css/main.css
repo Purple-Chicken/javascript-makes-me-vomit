@@ -411,6 +411,28 @@ pre {
   z-index: 5;
   appearance: auto;
   -webkit-appearance: menulist;
+  background: #000;
+  color: var(--text-color);
+}
+
+.chat-model-picker option,
+.chat-model-picker optgroup {
+  background: #000;
+  color: var(--text-color);
+}
+
+#settings-model-category,
+#settings-default-model {
+  background: #000;
+  color: var(--text-color);
+}
+
+#settings-model-category option,
+#settings-model-category optgroup,
+#settings-default-model option,
+#settings-default-model optgroup {
+  background: #000;
+  color: var(--text-color);
 }
 
 .chat-temp-toggle {
