@@ -45,7 +45,7 @@ Once you `cd` into the repository, you would need to make the following changes:
 - run `npm i` to install/update all the node modules
 - run `npm run dev` to run the development (testing) environment 
 
-> **Ollama configuration:** The chat feature calls the Ollama container at `http://127.0.0.1:11434` using the `qwen3:8b` model by default. You can change these in your `.env` file with `OLLAMA_URL` and `OLLAMA_MODEL`.
+> **Ollama configuration:** The chat feature calls the Ollama container at `http://127.0.0.1:11435` using the `qwen3:0.6b` model by default. You can change these in your `.env` file with `OLLAMA_URL` and `OLLAMA_MODEL`.
 
 Alternatively, you can run this handy dandy one-liner that does it all for you: 
 ```
@@ -84,5 +84,3 @@ git push --set-upstream origin [new-branch-name]
 And, assuming you are are not on main, you can push onto your branch. 
 
 In GitHub, you can make a pull request if you want to merge to main. 
-
-

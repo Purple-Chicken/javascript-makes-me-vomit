@@ -38,10 +38,36 @@ const TOPBAR_ICONS = [
   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24"><path d="M4 10l2-6 4 3h4l4-3 2 6"/><ellipse cx="12" cy="15" rx="7" ry="5"/><circle cx="10" cy="14" r="1"/><circle cx="14" cy="14" r="1"/><path d="M11 16.5l1 0.5 1-0.5"/></svg>`,
 ];
 
+const hasBrowserDOM = () => typeof window !== 'undefined' && typeof document !== 'undefined';
+
+const captureBrowserGlobals = () => ({
+  document: typeof document !== 'undefined' ? document : undefined,
+  window: typeof window !== 'undefined' ? window : undefined,
+  location: typeof location !== 'undefined' ? location : undefined,
+});
+
+const restoreBrowserGlobals = (globals: ReturnType<typeof captureBrowserGlobals>) => {
+  if (globals.document && typeof globalThis.document === 'undefined') {
+    (globalThis as any).document = globals.document;
+  }
+  if (globals.window && typeof globalThis.window === 'undefined') {
+    (globalThis as any).window = globals.window;
+  }
+  if (globals.location && typeof globalThis.location === 'undefined') {
+    (globalThis as any).location = globals.location;
+  }
+};
+
 const renderPage = (app: AppLike, html: string): Promise<void> => {
-  const appElement = app as HTMLElement;
+  const appElement = app as HTMLElement & { style?: { opacity?: string }, offsetHeight?: number };
 
   return new Promise((resolve) => {
+    if (!appElement.style) {
+      app.innerHTML = html;
+      resolve();
+      return;
+    }
+
     // Fade out
     appElement.style.opacity = '0';
 
@@ -75,6 +101,9 @@ async function checkAuth() {
 }
 
 export async function router(app: AppLike, path: string, modules: Record<string, Module>) {
+  const browserGlobals = captureBrowserGlobals();
+  restoreBrowserGlobals(browserGlobals);
+
   if (typeof currentModule?.cleanup === 'function') {
     try {
       currentModule.cleanup();
@@ -88,6 +117,7 @@ export async function router(app: AppLike, path: string, modules: Record<string,
   if (targetModule.protected) {
     const isLoggedIn = await checkAuth();
     if (!isLoggedIn) {
+      restoreBrowserGlobals(browserGlobals);
       window.location.hash = '#/login';
       return;
     }
@@ -97,12 +127,16 @@ export async function router(app: AppLike, path: string, modules: Record<string,
 
   await renderPage(app, currentModule.html);
 
+  restoreBrowserGlobals(browserGlobals);
   if (typeof currentModule.onLoad === 'function') {
     currentModule.onLoad();
   }
 }
 
 export async function handleRoute() {
+  const browserGlobals = captureBrowserGlobals();
+  restoreBrowserGlobals(browserGlobals);
+
   const app = document.getElementById('app');
   const rawPath = location.hash.slice(1) || '/';
   const path = rawPath.split('?')[0];
@@ -114,8 +148,12 @@ export async function handleRoute() {
 
   await router(app, path, modules);
 
+  restoreBrowserGlobals(browserGlobals);
+
   // Determine auth state for UI updates
   const isLoggedIn = await checkAuth();
+
+  restoreBrowserGlobals(browserGlobals);
 
   // Show/hide topbar elements based on auth
   const topbarAuth = document.getElementById('topbar-auth');
@@ -141,6 +179,12 @@ export async function handleRoute() {
           if (user.preferences) {
             localStorage.setItem('userPreferences', JSON.stringify(user.preferences));
             (window as any).__applyTheme?.(user.preferences);
+            if (user.preferences.defaultModel) {
+              localStorage.setItem('defaultModel', user.preferences.defaultModel);
+            }
+            if (user.preferences.modelCategory) {
+              localStorage.setItem('defaultModelCategory', user.preferences.modelCategory);
+            }
           }
           // Set profile icon
           if (typeof user.profilePic === 'number') {
@@ -162,12 +206,14 @@ export async function handleRoute() {
   }
 
   // Track current route on body for CSS targeting (e.g. light-mode backdrop)
-  document.body.dataset.route = path;
+  if (document.body) {
+    document.body.dataset.route = path;
+  }
 
   // Update nav active state
-  const navLinks = document.querySelectorAll('nav a');
+  const navLinks = document.querySelectorAll?.('nav a') ?? [];
   navLinks.forEach(link => link.classList.remove('active'));
-  const activeLink = document.querySelector(`nav a[data-route="${path}"]`);
+  const activeLink = document.querySelector?.(`nav a[data-route="${path}"]`);
   if (activeLink) {
     activeLink.classList.add('active');
   }
@@ -189,10 +235,14 @@ export async function handleRoute() {
   }
 
   // Populate sidebar with up to 6 recent chats
+  restoreBrowserGlobals(browserGlobals);
   await loadSidebarChats();
 }
 
 async function loadSidebarChats(activeId?: string) {
+  const browserGlobals = captureBrowserGlobals();
+  restoreBrowserGlobals(browserGlobals);
+
   const container = document.getElementById('sidebar-chats');
   if (!container) return;
 
@@ -208,6 +258,7 @@ async function loadSidebarChats(activeId?: string) {
     const res = await fetch('/api/conversations', {
       headers: { 'Authorization': `Bearer ${token}` }
     });
+    restoreBrowserGlobals(browserGlobals);
     if (!res.ok) { container.innerHTML = ''; return; }
     const conversations: { id: string; title: string; updatedAt: string }[] = await res.json();
     conversations.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
@@ -223,12 +274,12 @@ async function loadSidebarChats(activeId?: string) {
   }
 }
 
-window.addEventListener('sidebar:refresh', (e: Event) => {
-  const activeId = (e as CustomEvent).detail?.activeId;
-  loadSidebarChats(activeId);
-});
+if (hasBrowserDOM()) {
+  window.addEventListener('sidebar:refresh', (e: Event) => {
+    const activeId = (e as CustomEvent).detail?.activeId;
+    loadSidebarChats(activeId);
+  });
 
-if (typeof window !== 'undefined' && typeof document !== 'undefined') {
   // Global theme applicator — called from account page and on load
   (window as any).__applyTheme = (prefs: { matrixRain?: boolean; lightMode?: boolean; font?: string; themeColor?: string }) => {
     const body = document.body;
@@ -277,6 +328,8 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     const btn = document.getElementById('topbar-profile');
     const dropdown = document.getElementById('profile-dropdown') as HTMLElement | null;
     const usernameEl = document.getElementById('profile-dropdown-username');
+    const tokensBtn = document.getElementById('profile-dropdown-tokens-btn');
+    const tokensEl = document.getElementById('profile-dropdown-tokens');
     const logoutBtn = document.getElementById('profile-dropdown-logout');
     const settingsLink = document.getElementById('profile-dropdown-settings');
 
@@ -286,17 +339,37 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       const u = localStorage.getItem('cachedUsername');
       if (usernameEl) usernameEl.textContent = u || '—';
     };
+
+    const showTokenNote = () => {
+      if (!tokensEl) return;
+      tokensEl.textContent = 'Exact token usage is shown only when the model provider reports it.';
+    };
     updateUsername();
 
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       updateUsername();
+      showTokenNote();
       dropdown.style.display = dropdown.style.display === 'none' ? '' : 'none';
+    });
+
+    tokensBtn?.addEventListener('mouseenter', () => {
+      if (tokensEl) tokensEl.style.display = '';
+      showTokenNote();
+    });
+    tokensBtn?.addEventListener('mouseleave', () => {
+      if (tokensEl) tokensEl.style.display = 'none';
+    });
+    tokensBtn?.addEventListener('click', () => {
+      if (!tokensEl) return;
+      tokensEl.style.display = tokensEl.style.display === 'none' ? '' : 'none';
+      showTokenNote();
     });
 
     document.addEventListener('click', (e) => {
       if (!(e.target as HTMLElement).closest('#profile-dropdown-wrap')) {
         dropdown.style.display = 'none';
+        if (tokensEl) tokensEl.style.display = 'none';
       }
     });
 
@@ -306,6 +379,8 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       localStorage.removeItem('userPreferences');
       localStorage.removeItem('userProfilePic');
       localStorage.removeItem('cachedUsername');
+      localStorage.removeItem('defaultModel');
+      localStorage.removeItem('defaultModelCategory');
       window.location.hash = '#/login';
       handleRoute();
     });

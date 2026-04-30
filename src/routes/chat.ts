@@ -2,13 +2,26 @@
 const html = `
   <div class="chat-wrapper">
     <div class="chat-header">
-      <h1 style="margin: 0; font-size: 1.5em;">Chat</h1>
+      <div class="chat-header-controls">
+        <div hidden><h1>Chat</h1></div>
+        <h1 id="chat-title" style="margin: 0; font-size: 1.5em;">Chat - qwen3:0.6b</h1>
+        <select id="chat-model-picker" class="input chat-model-picker" aria-label="Model picker"></select>
+        <label class="chat-temp-toggle" title="Temporary chat will not be saved">
+          <input type="checkbox" id="chat-temp-toggle-input" />
+          <span>Temporary</span>
+        </label>
+      </div>
     </div>
     <div id="chat-messages">
     </div>
     <form id="chatForm" class="chat-input-bar">
       <div class="chat-input-wrap">
+        <button class="chat-upload-btn" type="button" id="chat-upload-btn" title="Upload file">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        </button>
+        <input type="file" id="chat-file-input" style="display:none;" />
         <div class="input-prompt" style="flex: 1;"><textarea id="chat-input" class="input chat-textarea" placeholder="&lt;prompt here&gt;" autocomplete="off" rows="1"></textarea></div>
+        <div id="chat-upload-status" class="chat-upload-status" style="display:none;"></div>
         <button class="send-btn-inner" type="submit" id="send-btn" title="Send" style="display:none;">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
         </button>
@@ -27,18 +40,153 @@ function escapeHtml(s: string) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+function renderMessageBody(raw: string) {
+  const escaped = escapeHtml(raw);
+  if (!raw.includes('```')) {
+    return `<div class="message-body"><p>${escaped}</p></div>`;
+  }
+
+  // Minimal fenced-code support so copy/clipboard tests can target visible code blocks.
+  const rich = escaped.replace(/```([\s\S]*?)```/g, (_m, code) => `<pre><code>${code.trim()}</code></pre>`).replace(/\n/g, '<br/>');
+  return `<div class="message-body">${rich}</div>`;
+}
+
 const onLoad = () => {
   const form = document.getElementById('chatForm') as HTMLFormElement;
   const input = document.getElementById('chat-input') as HTMLTextAreaElement;
   const messages = document.getElementById('chat-messages') as HTMLDivElement;
   const sendBtn = document.getElementById('send-btn') as HTMLButtonElement;
   const stopBtn = document.getElementById('stop-btn') as HTMLButtonElement;
+  const uploadBtn = document.getElementById('chat-upload-btn') as HTMLButtonElement;
+  const fileInput = document.getElementById('chat-file-input') as HTMLInputElement;
+  const uploadStatus = document.getElementById('chat-upload-status') as HTMLDivElement;
+  const modelPicker = document.getElementById('chat-model-picker') as HTMLSelectElement;
+  const tempToggle = document.getElementById('chat-temp-toggle-input') as HTMLInputElement;
+  const chatTitle = document.getElementById('chat-title') as HTMLElement;
   let isGenerating = false;
   let abortController: AbortController | null = null;
   let currentUserMessage = '';  // track for stop persistence
+  let selectedModelId = localStorage.getItem('defaultModel') || 'qwen3:0.6b';
+  let pendingAttachment: { name: string; context: string } | null = null;
 
   // Load current conversation id from hash or start fresh
   let activeConversationId: string | null = new URLSearchParams(location.hash.split('?')[1] || '').get('id');
+
+  const updateHeader = () => {
+    if (chatTitle) {
+      chatTitle.textContent = `Chat - ${selectedModelId}${tempToggle?.checked ? ' (temporary)' : ''}`;
+    }
+  };
+
+  const showUploadStatus = (text: string, isError = false) => {
+    if (!uploadStatus) return;
+    uploadStatus.style.display = '';
+    uploadStatus.textContent = text;
+    uploadStatus.classList.toggle('error', isError);
+  };
+
+  const clearUploadStatus = () => {
+    if (!uploadStatus) return;
+    uploadStatus.style.display = 'none';
+    uploadStatus.textContent = '';
+    uploadStatus.classList.remove('error');
+  };
+
+  const renderTokenUsage = (target: HTMLElement, usage?: { tokenCost?: number }) => {
+    const tokenEl = target.querySelector('.token-usage') as HTMLElement | null;
+    if (!tokenEl || !usage || typeof usage.tokenCost !== 'number') return;
+    tokenEl.textContent = `Token cost: ${usage.tokenCost}`;
+    tokenEl.style.display = '';
+  };
+
+  const fileToBase64 = (file: File) => new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || '');
+      const payload = result.includes(',') ? result.split(',')[1] : result;
+      resolve(payload);
+    };
+    reader.onerror = () => reject(new Error('Failed to read file'));
+    reader.readAsDataURL(file);
+  });
+
+  (async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const [modelsRes, settingsRes] = await Promise.all([
+        fetch('/api/models', { headers: { Authorization: `Bearer ${token}` } }),
+        fetch('/api/settings/me', { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+
+      if (modelsRes.ok) {
+        const models = await modelsRes.json() as Array<{ id: string; category: 'local' | 'cloud'; available?: boolean }>;
+        const local = models.filter((m) => m.category === 'local');
+        const cloud = models.filter((m) => m.category === 'cloud');
+        modelPicker.innerHTML = `
+          <optgroup label="Local">${local.map((m) => `<option value="${m.id}">${m.id}</option>`).join('')}</optgroup>
+          <optgroup label="Cloud">${cloud.map((m) => `<option value="${m.id}">${m.id}${m.available === false ? ' (key required)' : ''}</option>`).join('')}</optgroup>
+        `;
+      }
+
+      if (settingsRes.ok) {
+        const settings = await settingsRes.json();
+        selectedModelId = settings.defaultModel || selectedModelId;
+      }
+      modelPicker.value = selectedModelId;
+      updateHeader();
+    } catch {
+      updateHeader();
+    }
+  })();
+
+  modelPicker?.addEventListener('change', () => {
+    selectedModelId = modelPicker.value;
+    localStorage.setItem('defaultModel', selectedModelId);
+    updateHeader();
+  });
+
+  tempToggle?.addEventListener('change', () => {
+    if (tempToggle.checked) {
+      activeConversationId = null;
+      window.dispatchEvent(new CustomEvent('sidebar:refresh', { detail: { activeId: null } }));
+    }
+    updateHeader();
+  });
+
+  uploadBtn?.addEventListener('click', () => {
+    fileInput?.click();
+  });
+
+  fileInput?.addEventListener('change', async () => {
+    const file = fileInput.files?.[0];
+    if (!file) return;
+
+    try {
+      showUploadStatus(`Scanning ${file.name}...`);
+      const contentBase64 = await fileToBase64(file);
+      const res = await fetch('/api/files/scan', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+        body: JSON.stringify({ filename: file.name, mimeType: file.type, contentBase64 }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showUploadStatus(data.error || 'Failed to scan file.', true);
+        return;
+      }
+
+      pendingAttachment = { name: file.name, context: String(data.summary || '') };
+      showUploadStatus(`Attached: ${file.name}`);
+    } catch {
+      showUploadStatus('Failed to upload file.', true);
+    } finally {
+      fileInput.value = '';
+    }
+  });
 
   // If resuming a previous conversation, fetch its messages
   if (activeConversationId) {
@@ -48,6 +196,11 @@ const onLoad = () => {
       });
       if (res.ok) {
         const data = await res.json();
+        if (data.modelId) {
+          selectedModelId = data.modelId;
+          if (modelPicker) modelPicker.value = selectedModelId;
+          updateHeader();
+        }
         if (messages && Array.isArray(data.messages)) {
           const copyBtn = `<button class="bubble-copy-btn" title="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>`;
           messages.innerHTML = data.messages.map((m: { role: string; content: string }) => {
@@ -55,8 +208,8 @@ const onLoad = () => {
             const label = m.role === 'user' ? 'You' : 'LLM';
             const copy = copyBtn;
             const bubbleContent = m.role === 'user'
-              ? `<div class="chat-bubble ${cls}">${copy}<div class="bubble-role">${label}</div><p>${escapeHtml(m.content)}</p></div>`
-              : `${copy}<div class="chat-bubble ${cls}"><div class="bubble-role">${label}</div><p>${escapeHtml(m.content)}</p></div>`;
+              ? `<div class="chat-bubble ${cls}">${copy}<div class="bubble-role">${label}</div>${renderMessageBody(m.content)}</div>`
+              : `${copy}<div class="chat-bubble ${cls}"><div class="bubble-role">${label}</div>${renderMessageBody(m.content)}</div>`;
             return `<div class="chat-message ${cls}">${bubbleContent}</div>`;
           }).join('');
           messages.scrollTo(0, messages.scrollHeight);
@@ -182,7 +335,7 @@ const onLoad = () => {
     // Append user bubble
     const userMessage = document.createElement('div');
     userMessage.className = 'chat-message user';
-    userMessage.innerHTML = `<div class="chat-bubble user"><button class="bubble-copy-btn" title="Copy">${copyBtnSvg}</button><div class="bubble-role">You</div><p>${escapeHtml(text)}</p></div>`;
+    userMessage.innerHTML = `<div class="chat-bubble user"><button class="bubble-copy-btn" title="Copy">${copyBtnSvg}</button><div class="bubble-role">You</div>${renderMessageBody(text)}</div>`;
     messages?.appendChild(userMessage);
     input.value = '';
     input.style.height = 'auto';
@@ -192,7 +345,7 @@ const onLoad = () => {
     // Create LLM bubble with spinner
     const llmMessage = document.createElement('div');
     llmMessage.className = 'chat-message llm';
-    llmMessage.innerHTML = `<button class="bubble-copy-btn" title="Copy">${copyBtnSvg}</button><div class="chat-bubble llm"><div class="bubble-role">LLM</div><div class="thinking-section" style="display:none;"><button class="thinking-toggle" type="button"><span class="spinner"></span> Thinking…</button><div class="thinking-content" style="display:none;"></div></div><div class="llm-spinner"><span class="spinner"></span></div><p class="llm-text"></p></div>`;
+    llmMessage.innerHTML = `<button class="bubble-copy-btn" title="Copy">${copyBtnSvg}</button><div class="chat-bubble llm"><div class="bubble-role">LLM</div><div class="thinking-section" style="display:none;"><button class="thinking-toggle" type="button"><span class="spinner"></span> Thinking...</button><div class="thinking-content" style="display:none;"></div></div><div class="llm-spinner"><span class="spinner"></span> typing...</div><div class="llm-text"></div><div class="token-usage" style="display:none;"></div></div>`;
     messages?.appendChild(llmMessage);
     const llmBubble = llmMessage.querySelector('.chat-bubble') as HTMLElement;
     messages?.scrollTo(0, messages.scrollHeight);
@@ -217,12 +370,34 @@ const onLoad = () => {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
-        body: JSON.stringify({ message: text, conversationId: activeConversationId }),
+        body: JSON.stringify({
+          message: text,
+          conversationId: activeConversationId,
+          modelId: selectedModelId,
+          isTemporary: tempToggle?.checked,
+          attachmentName: pendingAttachment?.name,
+          attachmentContext: pendingAttachment?.context,
+        }),
         signal: abortController!.signal
       });
 
+      pendingAttachment = null;
+      clearUploadStatus();
+
       if (!res.ok || !res.body) {
-        textEl.innerHTML = '<em>Error getting response.</em>';
+        let detail = '';
+        try {
+          detail = await res.text();
+        } catch {}
+        let message = detail.trim();
+        if (message.startsWith('{')) {
+          try {
+            const parsed = JSON.parse(message) as { error?: string };
+            message = parsed.error || message;
+          } catch {}
+        }
+        const statusInfo = `Request failed (${res.status})`;
+        textEl.innerHTML = `<em>${escapeHtml(message || statusInfo)}</em>`;
         spinnerEl.style.display = 'none';
         isGenerating = false;
         return;
@@ -235,6 +410,8 @@ const onLoad = () => {
       let inThink = false;
       let thinkText = '';
       let replyText = '';
+      let receivedAnyToken = false;
+      let hadStreamError = false;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -260,16 +437,21 @@ const onLoad = () => {
               if (chunk.conversationId && !activeConversationId) {
                 activeConversationId = chunk.conversationId;
                 window.dispatchEvent(new CustomEvent('sidebar:refresh', { detail: { activeId: activeConversationId } }));
+              } else if (!chunk.conversationId) {
+                activeConversationId = null;
               }
+              renderTokenUsage(llmBubble, chunk.tokenUsage);
               continue;
             }
 
             if (chunk.error) {
+              hadStreamError = true;
               textEl.innerHTML = `<em>${escapeHtml(chunk.error)}</em>`;
               continue;
             }
 
             if (chunk.token) {
+              receivedAnyToken = true;
               fullContent += chunk.token;
 
               // Parse thinking vs reply content from accumulated text
@@ -314,7 +496,7 @@ const onLoad = () => {
               const trimmed = replyText.trim();
               if (trimmed) {
                 spinnerEl.style.display = 'none';
-                textEl.textContent = trimmed;
+                textEl.innerHTML = renderMessageBody(trimmed);
               }
 
               messages?.scrollTo(0, messages.scrollHeight);
@@ -325,7 +507,8 @@ const onLoad = () => {
 
       // Final cleanup
       spinnerEl.style.display = 'none';
-      if (!replyText.trim() && !thinkText.trim()) {
+      const hasAnyText = Boolean(replyText.trim() || thinkText.trim());
+      if (!hasAnyText && !receivedAnyToken && !hadStreamError) {
         textEl.innerHTML = '<em>No response.</em>';
       }
 
@@ -343,7 +526,7 @@ const onLoad = () => {
               'Content-Type': 'application/json',
               'Authorization': `Bearer ${localStorage.getItem('token')}`
             },
-            body: JSON.stringify({ message: currentUserMessage, conversationId: activeConversationId })
+            body: JSON.stringify({ message: currentUserMessage, conversationId: activeConversationId, modelId: selectedModelId, isTemporary: tempToggle?.checked })
           });
           if (stopRes.ok) {
             const stopData = await stopRes.json();
@@ -377,7 +560,7 @@ const onLoad = () => {
     if (!btn) return;
     const message = btn.closest('.chat-message');
     const bubble = message?.querySelector('.chat-bubble');
-    const text = (bubble?.querySelector('.llm-text') || bubble?.querySelector('p'))?.textContent?.trim() ?? '';
+    const text = (bubble?.querySelector('.llm-text') || bubble?.querySelector('.message-body'))?.textContent?.trim() ?? '';
     if (!text) return;
 
     const orig = btn.innerHTML;

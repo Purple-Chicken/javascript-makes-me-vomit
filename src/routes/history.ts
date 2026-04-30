@@ -40,6 +40,10 @@ const onLoad = () => {
   const searchInput = document.getElementById('history-search') as HTMLInputElement;
   const searchBtn = document.getElementById('history-search-btn');
 
+  if (!list || !searchInput || !searchBtn) {
+    return;
+  }
+
   let allConversations: { id: string; title: string; updatedAt: string }[] = [];
 
   // Fetch all conversations for the current user

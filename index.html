@@ -29,6 +29,8 @@
         </button>
         <div id="profile-dropdown" class="profile-dropdown" style="display:none;">
           <div class="profile-dropdown-username" id="profile-dropdown-username">—</div>
+          <button class="profile-dropdown-item" id="profile-dropdown-tokens-btn" type="button" title="View token usage note">Token Usage</button>
+          <div class="profile-dropdown-username" id="profile-dropdown-tokens" style="display:none; font-size: 0.85em;">Exact token usage is shown only when the model provider reports it.</div>
           <a href="#/account" class="profile-dropdown-item" id="profile-dropdown-settings">Account Settings</a>
           <button class="profile-dropdown-item profile-dropdown-logout" id="profile-dropdown-logout" type="button">Logout</button>
         </div>
@@ -54,6 +56,10 @@
       <a href="#/history" id="nav-history" data-route="/history">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" class="nav-icon"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
         <span class="nav-label">History</span>
+      </a>
+      <a href="#/settings" id="nav-settings" data-route="/settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" class="nav-icon"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V22a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.4.49.62 1.1.6 1.73"/></svg>
+        <span class="nav-label">Settings</span>
       </a>
     </nav>
     <div id="app"></div>

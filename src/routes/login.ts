@@ -28,11 +28,14 @@ const html=`
 `;
 const onLoad = () => {
     const form = document.getElementById('loginForm') as HTMLFormElement;
+    const usernameInput = document.getElementById('username') as HTMLInputElement | null;
+    const passwordInput = document.getElementById('password') as HTMLInputElement | null;
+    const storage = typeof sessionStorage !== 'undefined' ? sessionStorage : null;
 
-    const prefill = sessionStorage.getItem('prefill-username');
-    if (prefill) {
-      (document.getElementById('username') as HTMLInputElement).value = prefill;
-      sessionStorage.removeItem('prefill-username');
+    const prefill = storage?.getItem('prefill-username');
+    if (prefill && usernameInput) {
+      usernameInput.value = prefill;
+      storage?.removeItem('prefill-username');
     }
 
     document.getElementById('forgot-password')?.addEventListener('click', (e) => {
@@ -42,8 +45,8 @@ const onLoad = () => {
 
     form?.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const username = (document.getElementById('username') as HTMLInputElement).value;
-      const password = (document.getElementById('password') as HTMLInputElement).value;
+      const username = usernameInput?.value || '';
+      const password = passwordInput?.value || '';
       const rememberMe = (document.getElementById('remember-me') as HTMLInputElement | null)?.checked ?? false;
 
       const response = await fetch('/api/sessions', {

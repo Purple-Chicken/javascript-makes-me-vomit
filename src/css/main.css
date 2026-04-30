@@ -373,7 +373,7 @@ pre {
   height: 100vh;
   width: 100%;
   margin-top: -60px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .chat-header {
@@ -389,6 +389,58 @@ pre {
   pointer-events: none;
   transition: left 0.25s ease;
   background: transparent;
+  overflow: visible;
+}
+
+.chat-header-controls {
+  position: relative;
+  z-index: 4;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: color-mix(in srgb, #000 75%, transparent);
+}
+
+.chat-model-picker {
+  min-width: 190px;
+  padding: 6px 10px;
+  position: relative;
+  z-index: 5;
+  appearance: auto;
+  -webkit-appearance: menulist;
+  background: #000;
+  color: var(--text-color);
+}
+
+.chat-model-picker option,
+.chat-model-picker optgroup {
+  background: #000;
+  color: var(--text-color);
+}
+
+#settings-model-category,
+#settings-default-model {
+  background: #000;
+  color: var(--text-color);
+}
+
+#settings-model-category option,
+#settings-model-category optgroup,
+#settings-default-model option,
+#settings-default-model optgroup {
+  background: #000;
+  color: var(--text-color);
+}
+
+.chat-temp-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85em;
+  color: var(--text-muted);
 }
 
 
@@ -431,6 +483,14 @@ body.nav-collapsed .chat-header {
   line-height: 1.6;
   font-size: 1em;
   margin: 0;
+}
+
+#chat-messages pre {
+  margin: 8px 0 0;
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  background: rgba(0, 0, 0, 0.35);
+  overflow-x: auto;
 }
 
 /* Chat messages — terminal rows on shared surface */
@@ -639,6 +699,39 @@ body.nav-collapsed .chat-header {
   width: 100%;
   margin: 0 auto;
   padding: 4px 24px 6px;
+}
+
+.chat-upload-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 8px;
+}
+
+.chat-upload-btn:hover {
+  color: var(--accent);
+}
+
+.chat-upload-status {
+  position: absolute;
+  left: 44px;
+  top: -22px;
+  font-size: 0.74em;
+  color: var(--text-muted);
+}
+
+.chat-upload-status.error {
+  color: #ff6b6b;
+}
+
+.token-usage {
+  margin-top: 8px;
+  font-size: 0.72em;
+  color: var(--text-muted);
 }
 
 .chat-input-wrap .input {
@@ -902,10 +995,12 @@ body.nav-collapsed .sidebar-section-label {
   padding: 0 20px;
   z-index: 3;
   background: transparent;
+  pointer-events: none;
 }
 
 #profile-dropdown-wrap {
   position: relative;
+  pointer-events: auto;
 }
 
 .profile-dropdown {
@@ -957,6 +1052,7 @@ body.nav-collapsed .sidebar-section-label {
 #topbar-auth {
   display: flex;
   gap: 8px;
+  pointer-events: auto;
 }
 
 .topbar-btn {
